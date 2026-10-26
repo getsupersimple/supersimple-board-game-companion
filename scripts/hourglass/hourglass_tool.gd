@@ -70,6 +70,7 @@ func _exit_tree() -> void:
 
 
 func _process(_delta: float) -> void:
+	_sand.muted = not is_visible_in_tree()
 	_follow_gravity()
 	if _finished and _sand.upstream_count() > 0:
 		_finished = false
@@ -129,7 +130,7 @@ func _on_drained() -> void:
 	if _finished:
 		return
 	_finished = true
-	TimerAlert.sound_the_alarm(self)
+	TimerAlert.chime(self)
 
 
 func _reset() -> void:

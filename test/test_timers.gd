@@ -199,3 +199,40 @@ func test_sounds_that_can_go_on_loop_and_a_bell_does_not() -> void:
 		assert_eq(held.loop_mode, AudioStreamWAV.LOOP_FORWARD, "%s loops while held" % kind)
 		assert_eq(held.loop_end, SoundBank.SAMPLE_RATE, "%s loops over a whole second" % kind)
 	assert_null(SoundBank.sustained("ding"), "a bell plays once")
+
+
+func test_the_hourglass_ends_with_a_soft_chime_not_the_alarm() -> void:
+	AppSettings.timer_buzzer = true
+	var host := Node.new()
+	add_child_autofree(host)
+	TimerAlert.chime(host)
+	var players := []
+	for child in host.get_children():
+		if child is AudioStreamPlayer:
+			players.append(child)
+	assert_eq(players.size(), 1)
+	assert_eq(players[0].stream, SoundBank.stream("chime"))
+	assert_ne(players[0].stream, SoundBank.stream("alarm"))
+
+
+func test_the_chime_is_silent_when_the_timer_buzzer_is_off() -> void:
+	AppSettings.timer_buzzer = false
+	var host := Node.new()
+	add_child_autofree(host)
+	TimerAlert.chime(host)
+	assert_eq(host.get_child_count(), 0)
+	AppSettings.timer_buzzer = true
+
+
+func test_the_chime_is_soft_and_fades_to_nothing() -> void:
+	var chime := SoundBank.stream("chime")
+	var count := chime.data.size() / 2
+	var peak := 0.0
+	var last_second := 0.0
+	for i in count:
+		var value := absf(chime.data.decode_s16(i * 2) / 32768.0)
+		peak = maxf(peak, value)
+		if i > count - SoundBank.SAMPLE_RATE / 4:
+			last_second = maxf(last_second, value)
+	assert_lt(peak, 0.6, "gentle, never harsh")
+	assert_lt(last_second, 0.01, "faded away by the end")

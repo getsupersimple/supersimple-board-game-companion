@@ -313,3 +313,54 @@ func test_touching_a_neighbour_does_not_stop_a_flat_die_being_chained() -> void:
 	second.global_transform = Transform3D(Basis.IDENTITY, Vector3(1.04, 0.52, 0))
 	await wait_physics_frames(3)
 	assert_true(second.can_lie_flat(), "side by side is fine")
+
+
+func _sound_players(die: Die) -> Array:
+	var found := []
+	for child in die.get_children():
+		if child is AudioStreamPlayer:
+			found.append(child)
+	return found
+
+
+func test_locking_a_die_clanks_and_letting_go_clinks() -> void:
+	AppSettings.dice_sound = true
+	var die := Die.new()
+	die.setup(6, Color.RED)
+	add_child_autofree(die)
+	die.set_locked(true)
+	var players := _sound_players(die)
+	assert_eq(players.size(), 1, "one clank")
+	assert_eq(players[0].stream, SoundBank.stream("chain"))
+	assert_true(players[0].playing)
+	await wait_seconds(1.0)
+	die.set_locked(false)
+	var after := _sound_players(die)
+	assert_eq(after.size(), 1, "the clank has finished, and one clink plays")
+	assert_eq(after[0].stream, SoundBank.stream("unchain"))
+
+
+func test_locking_is_silent_when_the_dice_sound_is_off() -> void:
+	AppSettings.dice_sound = false
+	var die := Die.new()
+	die.setup(6, Color.RED)
+	add_child_autofree(die)
+	die.set_locked(true)
+	assert_eq(_sound_players(die).size(), 0)
+	AppSettings.dice_sound = true
+
+
+func test_moving_a_locked_die_does_not_clank_again() -> void:
+	AppSettings.dice_sound = true
+	var die := Die.new()
+	die.setup(6, Color.RED)
+	add_child_autofree(die)
+	die.set_locked(true)
+	await wait_seconds(1.0)
+	die.rewrap_chain()
+	assert_eq(_sound_players(die).size(), 0, "a quiet re-lay")
+
+
+func test_the_lock_sounds_exist() -> void:
+	assert_gt(SoundBank.stream("chain").data.size(), 5000)
+	assert_gt(SoundBank.stream("unchain").data.size(), 2000)

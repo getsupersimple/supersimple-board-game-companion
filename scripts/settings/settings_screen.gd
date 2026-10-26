@@ -37,6 +37,7 @@ func _ready() -> void:
 
 	column.add_child(_make_row(["dices", "volume-2"], "dice_sound", "SETTINGS_DICE_SOUND"))
 	column.add_child(_make_row(["timer", "bell"], "timer_buzzer", "SETTINGS_TIMER_BUZZER"))
+	column.add_child(_make_row(["hourglass", "volume-2"], "sand_sound", "SETTINGS_SAND_SOUND"))
 	column.add_child(_make_row(["vibrate"], "haptics", "SETTINGS_HAPTICS"))
 
 

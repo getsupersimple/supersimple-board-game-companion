@@ -201,3 +201,66 @@ func test_the_glass_pane_covers_the_widest_part_of_the_glass() -> void:
 	add_child_autofree(pane)
 	assert_gte(pane.size.x * 0.5, HourglassShape.half_width(HourglassShape.BELLY_CENTRE_Y))
 	assert_almost_eq(pane.size.y, HourglassShape.HEIGHT, 0.01)
+
+
+func _count_taps(sand: HourglassSand) -> Array:
+	var taps := []
+	sand.grain_tapped.connect(func(strength: float, on_glass: bool) -> void: taps.append([strength, on_glass]))
+	return taps
+
+
+func test_sand_falling_patters_softly() -> void:
+	var sand := _glass(30)
+	var taps := _count_taps(sand)
+	sand.gravity_strength = 1.0
+	sand.gravity_direction = Vector2.DOWN
+	await wait_seconds(4.0)
+	assert_gt(taps.size(), 8, "grains tap as they land")
+	var loudest := 0.0
+	for tap in taps:
+		loudest = maxf(loudest, tap[0])
+		assert_between(tap[0], 0.0, 1.0)
+	assert_gt(loudest, 0.0)
+
+
+func test_a_resting_glass_is_quiet() -> void:
+	var sand := _glass(30)
+	sand.gravity_strength = 1.0
+	sand.gravity_direction = Vector2.RIGHT
+	await wait_seconds(3.0)
+	var taps := _count_taps(sand)
+	await wait_seconds(1.5)
+	assert_lte(taps.size(), 2, "a few stray taps at most once the sand has settled")
+
+
+func test_a_tap_plays_a_glass_tink_or_a_sand_pat_and_follows_the_switches() -> void:
+	AppSettings.sand_sound = true
+	var sand := _glass(30)
+	sand._play_tap(0.8, true)
+	var played := 0
+	for voice in sand._voices:
+		if voice.playing:
+			played += 1
+	assert_eq(played, 1)
+	for voice in sand._voices:
+		voice.stop()
+	AppSettings.sand_sound = false
+	sand._play_tap(0.8, false)
+	for voice in sand._voices:
+		assert_false(voice.playing, "silent when switched off")
+	AppSettings.sand_sound = true
+	sand.muted = true
+	sand._play_tap(0.8, true)
+	for voice in sand._voices:
+		assert_false(voice.playing, "silent when out of sight")
+
+
+func test_every_grain_sound_exists_and_is_tiny_and_soft() -> void:
+	for on_glass in [true, false]:
+		for variant in HourglassSand.TAP_VARIANTS:
+			var tap := SoundBank.grain_tap(on_glass, variant)
+			assert_lt(tap.data.size() / 2.0 / SoundBank.SAMPLE_RATE, 0.1, "shorter than a tenth of a second")
+			var peak := 0.0
+			for i in tap.data.size() / 2:
+				peak = maxf(peak, absf(tap.data.decode_s16(i * 2) / 32768.0))
+			assert_between(peak, 0.15, 0.85, "audible but not harsh")

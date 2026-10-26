@@ -10,6 +10,8 @@ extends Node2D
 ## more grains in at the top, and taking time away lifts some out.
 
 signal drained
+## A grain has hit something: how hard (0 to 1), and whether it hit the glass or other sand.
+signal grain_tapped(strength: float, on_glass: bool)
 
 ## The size of the picture the glass is drawn into, in pixels.
 const VIEW_SIZE := Vector2i(660, 1430)
@@ -36,6 +38,17 @@ const TAIL_PULL := 0.9
 const STALL_MS := 300
 const TAP_REACH := 110.0
 const TAP_SPEED := 90.0
+## The patter of grains: a knock must change a grain's speed by at least this much
+## (pixels a second) to be heard, and one that changes it by TAP_HARD is as loud as
+## it gets. The loudest tap is still soft.
+const TAP_MIN_CHANGE := 420.0
+const TAP_HARD := 1500.0
+const TAP_QUIET_DB := -50.0
+const TAP_LOUD_DB := -27.0
+const TAP_VOICES := 8
+const TAPS_PER_FRAME := 3
+const TAP_GAP_MS := 9
+const TAP_VARIANTS := 3
 ## Sand lying in the curve of the glass loses its speed to the glass.
 const LYING_DAMPING := 5.0
 ## Keeps the curve's pull finite where the floor rises steeply at the glass wall.
@@ -60,7 +73,14 @@ var _was_flowing := false
 var _upstream := 0
 var _drained_reported := false
 var _material: PhysicsMaterial
+## Muted while the glass is out of sight, so it does not hiss from behind another screen.
+var muted := false
+
 var _total_when_ready := 60000
+var _voices: Array[AudioStreamPlayer] = []
+var _next_voice := 0
+var _last_velocities := PackedVector2Array()
+var _last_tap_ms := 0
 var _last_state := Vector3.ZERO
 
 
@@ -71,6 +91,11 @@ func _ready() -> void:
 	_build_walls()
 	_build_gate()
 	_build_art()
+	for i in TAP_VOICES:
+		var voice := AudioStreamPlayer.new()
+		add_child(voice)
+		_voices.append(voice)
+	grain_tapped.connect(_play_tap)
 	set_total_ms(_total_when_ready)
 
 
@@ -204,10 +229,13 @@ func _add_grain(spot: Vector2) -> void:
 func _rebuild_sides() -> void:
 	_sides.resize(grains.size())
 	_sides.fill(0)
+	_last_velocities.resize(grains.size())
+	_last_velocities.fill(Vector2.ZERO)
 	_update_sides()
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	_listen_for_taps(delta)
 	var along := clampf(gravity_strength, 0.0, 1.0)
 	# What gravity does not pull along the screen pulls into it: the glass lies on
 	# its side, and the sand settles in the curve of the glass.
@@ -247,6 +275,38 @@ static func depth_pull(at: Vector2) -> Vector2:
 	var floor_height := sqrt(maxf(half * half - at.x * at.x, 0.0) + SOFT_FLOOR * SOFT_FLOOR)
 	var pull := Vector2(-at.x / floor_height, half * slope / floor_height)
 	return pull.limit_length(1.0)
+
+
+## Finds the grains that have just knocked into something. A grain in free fall
+## speeds up by a known amount each step; a bigger change than that, in any
+## direction, is a knock. The harder the knock, the louder the tap.
+func _listen_for_taps(delta: float) -> void:
+	var expected := gravity_direction * gravity_strength * GRAVITY * delta
+	var heard := 0
+	var now := Time.get_ticks_msec()
+	for i in grains.size():
+		var velocity := grains[i].linear_velocity
+		var change := (velocity - _last_velocities[i] - expected).length()
+		_last_velocities[i] = velocity
+		if change < TAP_MIN_CHANGE or heard >= TAPS_PER_FRAME or now - _last_tap_ms < TAP_GAP_MS:
+			continue
+		heard += 1
+		_last_tap_ms = now
+		var position := grains[i].position
+		var on_glass := absf(position.x) > HourglassShape.half_width(position.y) - GRAIN_RADIUS * 1.7
+		grain_tapped.emit(clampf(change / TAP_HARD, 0.0, 1.0), on_glass)
+
+
+## One light tap: a glass tink if the grain hit the glass, a dull pat if it hit sand.
+func _play_tap(strength: float, on_glass: bool) -> void:
+	if not AppSettings.sand_sound or muted:
+		return
+	var voice := _voices[_next_voice]
+	_next_voice = (_next_voice + 1) % _voices.size()
+	voice.stream = SoundBank.grain_tap(on_glass, randi() % TAP_VARIANTS)
+	voice.volume_db = lerpf(TAP_QUIET_DB, TAP_LOUD_DB, pow(strength, 0.7)) + randf_range(-2.5, 1.5)
+	voice.pitch_scale = randf_range(0.88, 1.18)
+	voice.play()
 
 
 ## Works out which side of the neck every grain is on. Returns how many crossed.

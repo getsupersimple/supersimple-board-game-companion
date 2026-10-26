@@ -8,6 +8,7 @@ const SECTION := "settings"
 static var dice_sound := true
 static var timer_buzzer := true
 static var haptics := true
+static var sand_sound := true
 
 
 ## Reads and writes a switch by name, so a settings row can be built from a list.
@@ -19,6 +20,8 @@ static func get_flag(flag: String) -> bool:
 			return timer_buzzer
 		"haptics":
 			return haptics
+		"sand_sound":
+			return sand_sound
 	return false
 
 
@@ -30,6 +33,8 @@ static func set_flag(flag: String, value: bool) -> void:
 			timer_buzzer = value
 		"haptics":
 			haptics = value
+		"sand_sound":
+			sand_sound = value
 
 
 static func load_settings(path: String = PATH) -> void:
@@ -39,6 +44,7 @@ static func load_settings(path: String = PATH) -> void:
 	dice_sound = bool(config.get_value(SECTION, "dice_sound", true))
 	timer_buzzer = bool(config.get_value(SECTION, "timer_buzzer", true))
 	haptics = bool(config.get_value(SECTION, "haptics", true))
+	sand_sound = bool(config.get_value(SECTION, "sand_sound", true))
 
 
 static func save_settings(path: String = PATH) -> void:
@@ -46,4 +52,5 @@ static func save_settings(path: String = PATH) -> void:
 	config.set_value(SECTION, "dice_sound", dice_sound)
 	config.set_value(SECTION, "timer_buzzer", timer_buzzer)
 	config.set_value(SECTION, "haptics", haptics)
+	config.set_value(SECTION, "sand_sound", sand_sound)
 	config.save(path)

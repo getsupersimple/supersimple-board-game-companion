@@ -163,6 +163,7 @@ func _collision_shape() -> CollisionShape3D:
 
 
 func set_locked(is_locked: bool) -> void:
+	var was_locked := locked
 	locked = is_locked
 	if locked:
 		linear_velocity = Vector3.ZERO
@@ -179,6 +180,8 @@ func set_locked(is_locked: bool) -> void:
 		elif _chain != null:
 			_chain.queue_free()
 			_chain = null
+			if was_locked:
+				ChainFeedback.unlocked(self)
 
 
 ## A die can only be locked lying flat: one that is leaning, or resting on a
@@ -302,7 +305,7 @@ func reach() -> float:
 ## Lays the chain again, for when a locked die has been moved.
 func rewrap_chain() -> void:
 	if locked and is_inside_tree():
-		_wrap_chain()
+		_wrap_chain(false)
 
 
 ## The result, or -1 when the die is not lying flat.
@@ -338,7 +341,7 @@ func is_at_rest() -> bool:
 ## Crosses two chains over the die and bolts their ends to the table, like
 ## a cargo strap. Everything is placed in world space, which is fine because a
 ## locked die does not move.
-func _wrap_chain() -> void:
+func _wrap_chain(with_feedback: bool = true) -> void:
 	if _chain != null:
 		_chain.queue_free()
 	_chain = Node3D.new()
@@ -356,6 +359,8 @@ func _wrap_chain() -> void:
 	_lay_strap(second_axis, _extent_along(second_axis), CHAIN_CROSSING_LIFT, 1)
 	_add_score_label()
 	_clear_surroundings()
+	if with_feedback:
+		ChainFeedback.locked(self)
 
 
 ## The direction of the first chain on the table. The chains follow the die: they
