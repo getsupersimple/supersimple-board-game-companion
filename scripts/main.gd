@@ -1,9 +1,10 @@
 extends Control
-## Entry point. Owns the store and shows the home screen.
+## Entry point. Owns the store and switches between the home and game screens.
 
 var store: PresetStore
 
 @onready var _home: Home = %Home
+@onready var _game_screen: GameScreen = %GameScreen
 
 
 func _ready() -> void:
@@ -11,8 +12,15 @@ func _ready() -> void:
 	store.load_store()
 	_home.show_games(store)
 	_home.game_selected.connect(_on_game_selected)
+	_game_screen.back_pressed.connect(_show_home)
 
 
 func _on_game_selected(game_id: String) -> void:
-	# The game screen with its toolbar comes next.
-	print("Selected game: ", game_id)
+	_game_screen.open_game(store, game_id)
+	_home.visible = false
+	_game_screen.visible = true
+
+
+func _show_home() -> void:
+	_game_screen.visible = false
+	_home.visible = true

@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Theme" path="res://theme/app_theme.tres" id="1_theme"]
 [ext_resource type="Script" path="res://scripts/main.gd" id="2_main"]
 [ext_resource type="PackedScene" path="res://scenes/home/home.tscn" id="3_home"]
+[ext_resource type="PackedScene" path="res://scenes/game/game_screen.tscn" id="4_game"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -24,4 +25,9 @@ grow_vertical = 2
 
 [node name="Home" parent="." instance=ExtResource("3_home")]
 unique_name_in_owner = true
+layout_mode = 1
+
+[node name="GameScreen" parent="." instance=ExtResource("4_game")]
+unique_name_in_owner = true
+visible = false
 layout_mode = 1

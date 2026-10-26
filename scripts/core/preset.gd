@@ -16,6 +16,34 @@ var has_position: bool = false
 var position: Vector2 = Vector2.ZERO
 
 
+static func default_icon(preset_type: Type) -> String:
+	match preset_type:
+		Type.TIMER:
+			return "timer"
+		Type.TIMER_2P:
+			return "users"
+		Type.BUZZER:
+			return "bell"
+		_:
+			return "dices"
+
+
+static func default_color(preset_type: Type) -> Color:
+	match preset_type:
+		Type.TIMER:
+			return Color("#E5484D")
+		Type.TIMER_2P:
+			return Color("#30A46C")
+		Type.BUZZER:
+			return Color("#F5A524")
+		_:
+			return Color("#4F7CFF")
+
+
+static func create_default(preset_type: Type) -> Preset:
+	return create(preset_type, default_icon(preset_type), default_color(preset_type))
+
+
 static func create(preset_type: Type, preset_icon: String, preset_color: Color) -> Preset:
 	var preset := Preset.new()
 	preset.id = Ids.new_id()
