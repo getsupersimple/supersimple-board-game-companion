@@ -27,6 +27,10 @@ const GRAB_STIFFNESS := 60.0
 const GRAB_DAMPING := 9.0
 const GRAB_MAX_FORCE := 120.0
 const GRAB_PRESS_FORCE := 20.0
+const IMPACT_VOICES := 4
+const LOUD_SPEED := 10.0
+const HAPTIC_SPEED := 5.0
+const HAPTIC_GAP_MS := 120
 const TAP_DISTANCE := 0.4
 const LONG_PRESS_SECONDS := 0.5
 const RELEASE_MAX_SPEED := 10.0
@@ -53,10 +57,18 @@ var _grab_target := Vector3.ZERO
 var _grab_height := 0.0
 var _grab_travel := 0.0
 var _grab_time := 0.0
+var _voices: Array[AudioStreamPlayer] = []
+var _next_voice := 0
+var _last_haptic_ms := 0
 var _bounds: Node3D
 
 
 func _ready() -> void:
+	for i in IMPACT_VOICES:
+		var voice := AudioStreamPlayer.new()
+		voice.stream = SoundBank.stream("tick")
+		add_child(voice)
+		_voices.append(voice)
 	_build_environment()
 	_rebuild_bounds()
 
@@ -81,6 +93,7 @@ func add_die(side_count: int, color: Color, style: Die.NumeralStyle = Die.Numera
 	die.basis = Basis(Quaternion(Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized(), randf() * TAU))
 	die.linear_velocity = Vector3(0, -2.0, 0)
 	die.angular_velocity = _random_spin(8.0)
+	die.impact.connect(_on_impact)
 	dice.append(die)
 	_settled = false
 	_settle_time = 0.0
@@ -98,6 +111,21 @@ func add_percentile(color: Color) -> Array[Die]:
 
 
 ## Removing one half of a percentile pair removes both.
+## A knock plays a click, louder and lower for a harder knock, and a hard one
+## also gives a light tap in the hand.
+func _on_impact(strength: float) -> void:
+	if AppSettings.dice_sound:
+		var voice := _voices[_next_voice]
+		_next_voice = (_next_voice + 1) % _voices.size()
+		voice.volume_db = linear_to_db(clampf(strength / LOUD_SPEED, 0.08, 1.0))
+		voice.pitch_scale = randf_range(0.85, 1.25) - minf(strength / LOUD_SPEED, 1.0) * 0.2
+		voice.play()
+	var now := Time.get_ticks_msec()
+	if AppSettings.haptics and strength >= HAPTIC_SPEED and now - _last_haptic_ms >= HAPTIC_GAP_MS:
+		_last_haptic_ms = now
+		Input.vibrate_handheld(12)
+
+
 func remove_die(die: Die) -> void:
 	for doomed in [die, die.partner]:
 		if doomed != null:

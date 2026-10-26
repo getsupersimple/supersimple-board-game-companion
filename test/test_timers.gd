@@ -134,3 +134,36 @@ func test_pause_freezes_the_active_clock() -> void:
 	assert_false(game.tap(0, 15000), "taps do nothing while paused")
 	game.toggle_pause(30000)
 	assert_eq(game.display_ms(0, 35000), 45000)
+
+
+func test_settings_are_saved_and_loaded() -> void:
+	var path := "user://test_settings.cfg"
+	AppSettings.dice_sound = false
+	AppSettings.timer_buzzer = true
+	AppSettings.haptics = false
+	AppSettings.save_settings(path)
+	AppSettings.dice_sound = true
+	AppSettings.haptics = true
+	AppSettings.load_settings(path)
+	assert_false(AppSettings.dice_sound)
+	assert_true(AppSettings.timer_buzzer)
+	assert_false(AppSettings.haptics)
+	AppSettings.dice_sound = true
+	AppSettings.haptics = true
+	DirAccess.remove_absolute(path)
+
+
+func test_a_missing_settings_file_leaves_everything_on() -> void:
+	AppSettings.dice_sound = true
+	AppSettings.load_settings("user://does_not_exist.cfg")
+	assert_true(AppSettings.dice_sound)
+
+
+func test_every_buzzer_sound_exists_and_has_an_icon() -> void:
+	for kind in SoundBank.BUZZER_SOUNDS:
+		var stream := SoundBank.stream(kind)
+		assert_gt(stream.data.size(), 1000, "%s has sound" % kind)
+		assert_true(SoundBank.BUZZER_ICONS.has(kind), "%s has an icon" % kind)
+		assert_true(ResourceLoader.exists("res://assets/icons/lucide/%s.svg" % SoundBank.BUZZER_ICONS[kind]), "%s icon file" % kind)
+	assert_gt(SoundBank.stream("alarm").data.size(), 1000)
+	assert_gt(SoundBank.stream("tick").data.size(), 100)

@@ -65,6 +65,8 @@ static func make_reset_button(on_held: Callable) -> HoldButton:
 	var button := HoldButton.new()
 	button.icon = IconLibrary.get_icon("rotate-ccw")
 	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.custom_minimum_size = Vector2(150, 150)
 	button.accessibility_name = "Reset"
 	button.add_theme_constant_override("icon_max_width", 72)

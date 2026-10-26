@@ -116,6 +116,12 @@ func _make_tool(active: Preset) -> Control:
 			game_tool.store = store
 			game_tool.toolbar_visible_changed.connect(_set_toolbar_visible)
 			return game_tool
+		Preset.Type.BUZZER:
+			var buzzer_tool := BuzzerTool.new()
+			buzzer_tool.preset = active
+			buzzer_tool.store = store
+			buzzer_tool.appearance_changed.connect(_refresh)
+			return buzzer_tool
 	return null
 
 

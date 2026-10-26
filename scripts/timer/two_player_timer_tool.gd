@@ -79,6 +79,8 @@ func _make_pause_button() -> Button:
 	var button := Button.new()
 	button.icon = IconLibrary.get_icon("pause")
 	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.custom_minimum_size = Vector2(150, 150)
 	button.focus_mode = Control.FOCUS_NONE
 	button.accessibility_name = "Pause"

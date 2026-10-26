@@ -69,6 +69,8 @@ func _make_toggle(icon_name: String, label_key: String) -> Button:
 	button.toggle_mode = true
 	button.icon = IconLibrary.get_icon(icon_name)
 	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.custom_minimum_size = Vector2(TOGGLE_SIZE, TOGGLE_SIZE)
 	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	button.focus_mode = Control.FOCUS_NONE

@@ -3,6 +3,7 @@ extends Control
 ## Home screen: one tile per game, with the built-in Quick game first.
 
 signal game_selected(game_id: String)
+signal settings_pressed
 
 const COLUMNS := 2
 const NEW_GAME_COLORS: Array[Color] = [
@@ -18,6 +19,7 @@ var store: PresetStore
 func _ready() -> void:
 	_settings_button.icon = IconLibrary.get_icon("settings")
 	_settings_button.accessibility_name = tr("HOME_SETTINGS")
+	_settings_button.pressed.connect(func() -> void: settings_pressed.emit())
 	_grid.columns = COLUMNS
 	for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
 		_settings_button.add_theme_color_override(color_name, Color("#1C1C1E"))

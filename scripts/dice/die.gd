@@ -4,6 +4,10 @@ extends RigidBody3D
 ## settled. A die that is not lying flat has no result. The coin (d2) is a
 ## disc, and the d4 is read from its top vertex.
 
+## A knock against the table, a wall, or another die. `strength` is roughly the
+## speed of the knock in table units per second.
+signal impact(strength: float)
+
 ## How numerals are printed. Percentile dice are two d10s read together.
 enum NumeralStyle { NORMAL, TENS, UNITS }
 
@@ -26,6 +30,8 @@ const CHAIN_END_HEIGHT := 0.24
 const CHAIN_CROSSING_LIFT := 0.17
 const TABLE_TOP := 0.0
 const FLATTEN_SECONDS := 0.25
+const IMPACT_MIN_SPEED := 1.2
+const IMPACT_COOLDOWN := 0.05
 const FLAT_CLEARANCE := 0.96
 const CHAIN_HALF_WIDTH := 0.22
 const CHAIN_BAR_HEIGHT := 0.32
@@ -48,6 +54,8 @@ var shape_data: DieShape
 ## shakes and rolls, but other dice still bump into it.
 var locked := false
 var _chain: Node3D
+var _last_velocity := Vector3.ZERO
+var _impact_cooldown := 0.0
 var _chain_material: StandardMaterial3D
 var _chain_link_mesh: TorusMesh
 var _chain_body: StaticBody3D
@@ -64,6 +72,9 @@ func setup(side_count: int, color: Color, style: NumeralStyle = NumeralStyle.NOR
 	die_color = color
 	numeral_style = style
 
+	contact_monitor = true
+	max_contacts_reported = 4
+	body_entered.connect(_on_body_entered)
 	collision_layer = DICE_LAYER
 	collision_mask = DICE_LAYER | 1
 	mass = 1.0
@@ -301,6 +312,23 @@ func read_value() -> int:
 	if shape_data.reads_vertex:
 		return _read_top_vertex()
 	return _read_top_face()
+
+
+func _physics_process(delta: float) -> void:
+	_impact_cooldown = maxf(0.0, _impact_cooldown - delta)
+	_last_velocity = linear_velocity
+
+
+func _on_body_entered(other: Node) -> void:
+	if _impact_cooldown > 0.0:
+		return
+	var speed := _last_velocity.length()
+	if other is Die:
+		speed = (_last_velocity - other._last_velocity).length()
+	if speed < IMPACT_MIN_SPEED:
+		return
+	_impact_cooldown = IMPACT_COOLDOWN
+	impact.emit(speed)
 
 
 func is_at_rest() -> bool:
