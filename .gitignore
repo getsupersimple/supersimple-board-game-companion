@@ -1,0 +1,23 @@
+# Godot
+.godot/
+.import/
+*.translation
+export.cfg
+export_credentials.cfg
+*.tmp
+
+# Builds and signing (never commit keys)
+build/
+*.apk
+*.aab
+*.ipa
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+
+# macOS
+.DS_Store
+
+# Claude Code local settings
+.claude/settings.local.json
