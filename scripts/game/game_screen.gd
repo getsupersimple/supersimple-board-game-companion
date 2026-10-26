@@ -14,6 +14,8 @@ var game: Game
 var active_preset_id: String = ""
 
 var _editing := false
+var _tool_host: Control
+var _tool: Control
 
 @onready var _back_button: Button = %BackButton
 @onready var _done_button: Button = %DoneButton
@@ -33,6 +35,12 @@ func _ready() -> void:
 		for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
 			button.add_theme_color_override(color_name, Color("#1C1C1E"))
 	_build_picker()
+	_tool_host = Control.new()
+	_tool_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_tool_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var column := _active_icon.get_parent().get_parent()
+	column.add_child(_tool_host)
+	column.move_child(_tool_host, _active_icon.get_parent().get_index() + 1)
 
 
 func open_game(game_store: PresetStore, game_id: String) -> void:
@@ -41,10 +49,10 @@ func open_game(game_store: PresetStore, game_id: String) -> void:
 	_picker.visible = false
 	_editing = false
 	active_preset_id = game.presets[0].id if not game.presets.is_empty() else ""
-	_refresh()
+	_refresh(true)
 
 
-func _refresh() -> void:
+func _refresh(rebuild_tool: bool = false) -> void:
 	_done_button.visible = _editing
 	for child in _bar.get_children():
 		_bar.remove_child(child)
@@ -61,11 +69,27 @@ func _refresh() -> void:
 		chip.set_editing(_editing)
 	if not _editing:
 		_bar.add_child(_make_add_chip())
-	_show_active_preset()
+	if rebuild_tool:
+		_show_active_preset()
 
 
 func _show_active_preset() -> void:
+	if _tool != null:
+		_tool_host.remove_child(_tool)
+		_tool.queue_free()
+		_tool = null
 	var active := game.find_preset(active_preset_id)
+	if active != null and active.type == Preset.Type.DICE:
+		var dice_tool := DiceTool.new()
+		dice_tool.preset = active
+		dice_tool.store = store
+		_tool = dice_tool
+		_tool_host.add_child(_tool)
+		_active_icon.get_parent().visible = false
+		_tool_host.visible = true
+		return
+	_tool_host.visible = false
+	_active_icon.get_parent().visible = true
 	_active_icon.visible = active != null
 	if active != null:
 		_active_icon.texture = IconLibrary.get_icon(active.icon)
@@ -115,19 +139,19 @@ func _on_type_picked(preset_type: Preset.Type) -> void:
 	store.add_preset(game.id, preset)
 	active_preset_id = preset.id
 	_picker.visible = false
-	_refresh()
+	_refresh(true)
 
 
 func _on_chip_tapped(preset_id: String) -> void:
 	active_preset_id = preset_id
-	_refresh()
+	_refresh(true)
 
 
 func _on_delete_requested(preset_id: String) -> void:
 	store.remove_preset(game.id, preset_id)
 	if active_preset_id == preset_id:
 		active_preset_id = game.presets[0].id if not game.presets.is_empty() else ""
-	_refresh()
+	_refresh(true)
 
 
 func _on_reordered(from_index: int, to_index: int) -> void:
