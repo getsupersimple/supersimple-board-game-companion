@@ -141,6 +141,8 @@ func _accessibility_label() -> String:
 			return tr("PRESET_TIMER_2P")
 		Preset.Type.BUZZER:
 			return tr("PRESET_BUZZER")
+		Preset.Type.HOURGLASS:
+			return tr("PRESET_HOURGLASS")
 		_:
 			return tr("PRESET_DICE")
 

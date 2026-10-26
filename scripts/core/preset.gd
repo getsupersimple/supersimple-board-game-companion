@@ -3,7 +3,8 @@ extends RefCounted
 ## A configured tool shown in a game's toolbar. Identified by a colorable icon,
 ## never by a name. `data` holds the tool-specific settings.
 
-enum Type { DICE, TIMER, TIMER_2P, BUZZER }
+## New types go on the end: saved presets store the number.
+enum Type { DICE, TIMER, TIMER_2P, BUZZER, HOURGLASS }
 
 var id: String = ""
 var type: Type = Type.DICE
@@ -24,6 +25,8 @@ static func default_icon(preset_type: Type) -> String:
 			return "users"
 		Type.BUZZER:
 			return "bell"
+		Type.HOURGLASS:
+			return "hourglass"
 		_:
 			return "dices"
 
@@ -36,6 +39,8 @@ static func default_color(preset_type: Type) -> Color:
 			return Color("#30A46C")
 		Type.BUZZER:
 			return Color("#F5A524")
+		Type.HOURGLASS:
+			return Color("#D9A441")
 		_:
 			return Color("#4F7CFF")
 

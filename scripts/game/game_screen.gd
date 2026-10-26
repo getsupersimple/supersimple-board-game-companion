@@ -6,7 +6,7 @@ extends Control
 signal back_pressed
 
 const PICKER_TYPES: Array[Preset.Type] = [
-	Preset.Type.DICE, Preset.Type.TIMER, Preset.Type.TIMER_2P, Preset.Type.BUZZER,
+	Preset.Type.DICE, Preset.Type.TIMER, Preset.Type.TIMER_2P, Preset.Type.BUZZER, Preset.Type.HOURGLASS,
 ]
 
 var store: PresetStore
@@ -116,6 +116,11 @@ func _make_tool(active: Preset) -> Control:
 			game_tool.store = store
 			game_tool.toolbar_visible_changed.connect(_set_toolbar_visible)
 			return game_tool
+		Preset.Type.HOURGLASS:
+			var glass_tool := HourglassTool.new()
+			glass_tool.preset = active
+			glass_tool.store = store
+			return glass_tool
 		Preset.Type.BUZZER:
 			var buzzer_tool := BuzzerTool.new()
 			buzzer_tool.preset = active

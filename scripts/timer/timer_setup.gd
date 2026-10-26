@@ -16,13 +16,15 @@ var _seconds_wheel: WheelPicker
 var _infinity_button: Button
 var _repeat_button: Button
 var _with_repeat := false
+var _with_infinity := true
 
 
-func configure(data: Dictionary, with_repeat_toggle: bool) -> void:
+func configure(data: Dictionary, with_repeat_toggle: bool, with_infinity_toggle: bool = true) -> void:
 	limited = bool(data.get("limited", true))
 	seconds = clampi(int(data.get("seconds", 60)), 1, 99 * 60 + 59)
 	reset_each_turn = bool(data.get("reset_each_turn", false))
 	_with_repeat = with_repeat_toggle
+	_with_infinity = with_infinity_toggle
 	if is_inside_tree():
 		_refresh()
 
@@ -94,6 +96,7 @@ func _refresh() -> void:
 	_infinity_button.set_pressed_no_signal(not limited)
 	_repeat_button.set_pressed_no_signal(reset_each_turn)
 	_repeat_button.visible = _with_repeat
+	_infinity_button.visible = _with_infinity
 	_minutes_wheel.dimmed = not limited
 	_seconds_wheel.dimmed = not limited
 	_minutes_wheel.queue_redraw()
