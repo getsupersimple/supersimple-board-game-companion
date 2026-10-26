@@ -319,7 +319,10 @@ func _check_long_press(delta: float) -> void:
 		return
 	_grab_time += delta
 	if _grab_time >= LONG_PRESS_SECONDS:
-		_grabbed.set_locked(not _grabbed.locked)
+		if _grabbed.locked:
+			_grabbed.set_locked(false)
+		else:
+			_grabbed.try_lock()
 		_grabbed = null
 		_settled = false
 		_settle_time = 0.0

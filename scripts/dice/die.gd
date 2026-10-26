@@ -26,6 +26,7 @@ const CHAIN_END_HEIGHT := 0.24
 const CHAIN_CROSSING_LIFT := 0.17
 const TABLE_TOP := 0.0
 const FLATTEN_SECONDS := 0.25
+const FLAT_CLEARANCE := 0.96
 const CHAIN_HALF_WIDTH := 0.22
 const CHAIN_BAR_HEIGHT := 0.32
 const PLATE_HALF_SIZE := 0.375
@@ -101,6 +102,53 @@ func setup(side_count: int, color: Color, style: NumeralStyle = NumeralStyle.NOR
 	else:
 		for face in shape_data.faces:
 			add_child(_make_face_numeral(face, text_color))
+
+
+## Locks the die if it can lie flat on the table, and says whether it did. A die
+## lying on top of another, or wedged where turning it flat would push it into
+## something, cannot be chained, so it can never hold a neighbour in place.
+func try_lock() -> bool:
+	if can_lie_flat():
+		set_locked(true)
+		return true
+	_refuse_lock()
+	return false
+
+
+## Whether the die's flat position on the table is free of other dice, chains
+## and walls. A die that is already flat and clear is its own flat position.
+func can_lie_flat() -> bool:
+	if not is_inside_tree():
+		return true
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = _collision_shape().shape
+	# Slightly smaller, so touching a neighbour or the table does not count.
+	var target := flat_transform()
+	query.transform = Transform3D(target.basis.scaled(Vector3.ONE * FLAT_CLEARANCE), target.origin)
+	query.collision_mask = DICE_LAYER | 1
+	query.exclude = [get_rid()]
+	if partner != null:
+		query.exclude.append(partner.get_rid())
+	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
+## A short buzz and a quick pulse of the die, to say it cannot be locked here.
+func _refuse_lock() -> void:
+	if AppSettings.haptics:
+		Input.vibrate_handheld(60)
+	for child in get_children():
+		if child is MeshInstance3D:
+			var mesh_node: MeshInstance3D = child
+			create_tween().tween_property(mesh_node, "scale", Vector3.ONE * 1.12, 0.08)
+			create_tween().tween_property(mesh_node, "scale", Vector3.ONE, 0.12).set_delay(0.08)
+			break
+
+
+func _collision_shape() -> CollisionShape3D:
+	for child in get_children():
+		if child is CollisionShape3D:
+			return child
+	return null
 
 
 func set_locked(is_locked: bool) -> void:

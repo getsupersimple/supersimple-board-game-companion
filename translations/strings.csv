@@ -13,3 +13,5 @@ PRESET_TIMER,Timer
 PRESET_TIMER_2P,Two-player timer
 PRESET_BUZZER,Buzzer
 DICE_ROLL,Roll
+TIMER_COUNT_UP,Count up
+TIMER_RESET_EACH_TURN,Reset each turn

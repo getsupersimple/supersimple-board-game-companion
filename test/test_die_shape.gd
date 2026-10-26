@@ -256,3 +256,60 @@ func test_a_chained_die_shows_its_score_over_the_chains() -> void:
 		var label: Label3D = die._chain.get_node("ScoreLabel")
 		assert_eq(label.text, str(die.read_value()), "d%d shows its value" % sides)
 		assert_gt(label.position.y, die._highest_point(), "d%d number floats above the die" % sides)
+
+
+func test_a_die_on_top_of_another_cannot_be_chained() -> void:
+	var holder := Node3D.new()
+	add_child_autofree(holder)
+	var lower := Die.new()
+	lower.setup(6, Color.RED)
+	holder.add_child(lower)
+	lower.freeze = true
+	lower.global_transform = Transform3D(Basis.IDENTITY, Vector3(0, 0.52, 0))
+	var upper := Die.new()
+	upper.setup(6, Color.BLUE)
+	holder.add_child(upper)
+	upper.freeze = true
+	upper.global_transform = Transform3D(Basis.IDENTITY, Vector3(0.2, 1.7, 0))
+	await wait_physics_frames(3)
+	assert_false(upper.can_lie_flat(), "it would have to go through the die below")
+	assert_false(upper.try_lock())
+	assert_false(upper.locked)
+	assert_null(upper._chain, "no chain was put on")
+
+
+func test_a_die_with_room_to_lie_flat_can_be_chained() -> void:
+	var holder := Node3D.new()
+	add_child_autofree(holder)
+	var near := Die.new()
+	near.setup(6, Color.RED)
+	holder.add_child(near)
+	near.freeze = true
+	near.global_transform = Transform3D(Basis.IDENTITY, Vector3(0, 0.52, 0))
+	var beside := Die.new()
+	beside.setup(6, Color.BLUE)
+	holder.add_child(beside)
+	beside.freeze = true
+	# Cocked on a corner, a little way from the other die: room to flatten.
+	beside.global_transform = Transform3D(Basis(Quaternion(Vector3.ONE.normalized(), Vector3.UP)), Vector3(3.0, 0.9, 0))
+	await wait_physics_frames(3)
+	assert_true(beside.can_lie_flat())
+	assert_true(beside.try_lock())
+	assert_true(beside.locked)
+
+
+func test_touching_a_neighbour_does_not_stop_a_flat_die_being_chained() -> void:
+	var holder := Node3D.new()
+	add_child_autofree(holder)
+	var first := Die.new()
+	first.setup(6, Color.RED)
+	holder.add_child(first)
+	first.freeze = true
+	first.global_transform = Transform3D(Basis.IDENTITY, Vector3(0, 0.52, 0))
+	var second := Die.new()
+	second.setup(6, Color.BLUE)
+	holder.add_child(second)
+	second.freeze = true
+	second.global_transform = Transform3D(Basis.IDENTITY, Vector3(1.04, 0.52, 0))
+	await wait_physics_frames(3)
+	assert_true(second.can_lie_flat(), "side by side is fine")
