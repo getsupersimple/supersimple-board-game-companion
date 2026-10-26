@@ -167,3 +167,35 @@ func test_every_buzzer_sound_exists_and_has_an_icon() -> void:
 		assert_true(ResourceLoader.exists("res://assets/icons/lucide/%s.svg" % SoundBank.BUZZER_ICONS[kind]), "%s icon file" % kind)
 	assert_gt(SoundBank.stream("alarm").data.size(), 1000)
 	assert_gt(SoundBank.stream("tick").data.size(), 100)
+
+
+func test_the_buzzer_sounds_only_while_held_and_stops_at_once() -> void:
+	var tool := BuzzerTool.new()
+	tool.preset = Preset.create_default(Preset.Type.BUZZER)
+	tool.store = PresetStore.new("user://test_buzzer.cfg")
+	add_child_autofree(tool)
+	await wait_physics_frames(2)
+	assert_false(tool._player.playing, "silent until pressed")
+	tool._on_pressed()
+	assert_true(tool._player.playing, "sounds while held")
+	tool._on_released()
+	assert_false(tool._player.playing, "stops the moment the finger lifts")
+
+
+func test_choosing_a_sound_does_not_play_it() -> void:
+	var tool := BuzzerTool.new()
+	tool.preset = Preset.create_default(Preset.Type.BUZZER)
+	tool.store = PresetStore.new("user://test_buzzer.cfg")
+	add_child_autofree(tool)
+	await wait_physics_frames(2)
+	tool._choose("siren")
+	assert_false(tool._player.playing)
+	assert_eq(tool.preset.data["sound"], "siren")
+
+
+func test_sounds_that_can_go_on_loop_and_a_bell_does_not() -> void:
+	for kind in ["buzz", "horn", "siren"]:
+		var held := SoundBank.sustained(kind)
+		assert_eq(held.loop_mode, AudioStreamWAV.LOOP_FORWARD, "%s loops while held" % kind)
+		assert_eq(held.loop_end, SoundBank.SAMPLE_RATE, "%s loops over a whole second" % kind)
+	assert_null(SoundBank.sustained("ding"), "a bell plays once")

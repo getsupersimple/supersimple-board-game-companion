@@ -11,6 +11,8 @@ extends Node2D
 
 signal drained
 
+## The size of the picture the glass is drawn into, in pixels.
+const VIEW_SIZE := Vector2i(660, 1430)
 ## About how many grains a glass starts with.
 const BASE_GRAINS := 300
 ## The most grains the falling side holds. Past it, each grain is worth more time.
@@ -25,13 +27,19 @@ const FLOW_THRESHOLD := 0.5
 ## Sand cannot pour faster than the neck lets it, so a grain is never worth less.
 const MIN_GRAIN_MS := 60.0
 const MAX_ALLOWANCE := 6.0
-## The last few stragglers are treated as dust: when this few are left, time is up.
-const DUST_GRAINS := 4
+## When this few grains are left, the last of the sand is drawn on down to the
+## neck, so that every single grain goes through before time is up.
+const TAIL_GRAINS := 14
+const TAIL_PULL := 0.9
 ## If sand is meant to be running but nothing has crossed for this long, a jam of
 ## grains is wedged across the neck. A tap, like a real glass gets, frees it.
 const STALL_MS := 300
 const TAP_REACH := 110.0
 const TAP_SPEED := 90.0
+## Sand lying in the curve of the glass loses its speed to the glass.
+const LYING_DAMPING := 5.0
+## Keeps the curve's pull finite where the floor rises steeply at the glass wall.
+const SOFT_FLOOR := 40.0
 
 ## Which way gravity pulls on the screen, from 0 (none) to 1 (a full pull). The
 ## direction is a unit vector in screen axes, with y pointing down the screen.
@@ -53,6 +61,7 @@ var _upstream := 0
 var _drained_reported := false
 var _material: PhysicsMaterial
 var _total_when_ready := 60000
+var _last_state := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -61,6 +70,7 @@ func _ready() -> void:
 	_material.bounce = 0.05
 	_build_walls()
 	_build_gate()
+	_build_art()
 	set_total_ms(_total_when_ready)
 
 
@@ -75,8 +85,7 @@ func set_total_ms(total_ms: int) -> void:
 	for grain in grains:
 		grain.queue_free()
 	grains.clear()
-	# The dust grains are on top of the time: they are never counted as time left.
-	for spot in HourglassShape.spawn_positions(count + DUST_GRAINS, GRAIN_RADIUS, true):
+	for spot in HourglassShape.spawn_positions(count, GRAIN_RADIUS, true):
 		_add_grain(spot)
 	_rebuild_sides()
 	_close_gate()
@@ -89,16 +98,16 @@ func reset() -> void:
 	set_total_ms(total_ms())
 
 
-## What the whole glass is worth, in milliseconds, not counting the dust.
+## What the whole glass is worth, in milliseconds.
 func total_ms() -> int:
 	if grains.is_empty():
 		return _total_when_ready
-	return int(round(maxi(grains.size() - DUST_GRAINS, 1) * _grain_ms))
+	return int(round(maxi(grains.size(), 1) * _grain_ms))
 
 
 ## The time left, read from how much sand is still on the falling side.
 func remaining_ms() -> int:
-	return int(round(maxi(_upstream - DUST_GRAINS, 0) * _grain_ms))
+	return int(round(_upstream * _grain_ms))
 
 
 func upstream_count() -> int:
@@ -114,16 +123,16 @@ func is_flowing() -> bool:
 ## is falling from, or the sand furthest from the neck is lifted out.
 func add_time(delta_ms: int) -> void:
 	var wanted := maxi(remaining_ms() + delta_ms, 0)
-	var target := DUST_GRAINS
+	var target := 0
 	if wanted > 0:
-		target += maxi(int(round(wanted / _grain_ms)), 1)
+		target = maxi(int(round(wanted / _grain_ms)), 1)
 	# Each grain is worth no less than the neck can pass, and no more than the
 	# glass has room for.
 	if _grain_ms < MIN_GRAIN_MS and wanted > 0:
 		_grain_ms = MIN_GRAIN_MS
-		target = DUST_GRAINS + int(round(wanted / _grain_ms))
+		target = int(round(wanted / _grain_ms))
 	if target > MAX_UPSTREAM:
-		_grain_ms = wanted / float(MAX_UPSTREAM - DUST_GRAINS)
+		_grain_ms = wanted / float(MAX_UPSTREAM)
 		target = MAX_UPSTREAM
 	_set_upstream_count(target)
 
@@ -131,7 +140,7 @@ func add_time(delta_ms: int) -> void:
 func _plan(total_ms: int) -> int:
 	var grain_ms := maxf(total_ms / float(BASE_GRAINS), MIN_GRAIN_MS)
 	var count := int(round(total_ms / grain_ms))
-	return clampi(count, 1, MAX_UPSTREAM - DUST_GRAINS)
+	return clampi(count, 1, MAX_UPSTREAM)
 
 
 func _set_upstream_count(target: int) -> void:
@@ -199,15 +208,45 @@ func _rebuild_sides() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	var pull := gravity_direction * gravity_strength * GRAVITY
+	var along := clampf(gravity_strength, 0.0, 1.0)
+	# What gravity does not pull along the screen pulls into it: the glass lies on
+	# its side, and the sand settles in the curve of the glass.
+	var into := sqrt(maxf(1.0 - along * along, 0.0))
+	var pull := gravity_direction * along * GRAVITY
+	var state := Vector3(gravity_direction.x * along, gravity_direction.y * along, into)
+	if state.distance_to(_last_state) > 0.04:
+		_last_state = state
+		_wake_everything()
 	var keep_awake := is_flowing()
-	for grain in grains:
-		grain.apply_central_force(pull * grain.mass)
+	var sweeping := keep_awake and _upstream > 0 and _upstream <= TAIL_GRAINS
+	var upper_side := gravity_direction.y >= 0.0
+	for i in grains.size():
+		var grain := grains[i]
+		var force := pull
+		if sweeping and (_sides[i] < 0) == upper_side:
+			force += (Vector2(0.0, HourglassShape.NECK_Y) - grain.position).normalized() * TAIL_PULL * GRAVITY
+		if into > 0.02:
+			force += depth_pull(grain.position) * into * GRAVITY
+			force -= grain.linear_velocity * LYING_DAMPING * into
+		grain.apply_central_force(force * grain.mass)
 		if keep_awake:
 			grain.sleeping = false
 	_return_escapees()
 	var crossed := _update_sides()
 	_meter_the_flow(crossed)
+
+
+## Which way, and how hard, the curve of the glass pulls a grain when the glass
+## lies on its side. The glass is round, so its floor is lowest along the middle
+## and lowest of all where it is widest. A grain slides down that floor: towards
+## the middle line, and towards the widest part of its bulb, away from the neck.
+## The result is a unit pull at most, in the same units as gravity.
+static func depth_pull(at: Vector2) -> Vector2:
+	var half := HourglassShape.half_width(at.y)
+	var slope := (HourglassShape.half_width(at.y + 2.0) - HourglassShape.half_width(at.y - 2.0)) / 4.0
+	var floor_height := sqrt(maxf(half * half - at.x * at.x, 0.0) + SOFT_FLOOR * SOFT_FLOOR)
+	var pull := Vector2(-at.x / floor_height, half * slope / floor_height)
+	return pull.limit_length(1.0)
 
 
 ## Works out which side of the neck every grain is on. Returns how many crossed.
@@ -229,7 +268,7 @@ func _meter_the_flow(crossed: int) -> void:
 	var now := Time.get_ticks_msec()
 	var elapsed := now - _last_tick_ms
 	_last_tick_ms = now
-	if _upstream > DUST_GRAINS:
+	if _upstream > 0:
 		_drained_reported = false
 	if not is_flowing():
 		_close_gate()
@@ -246,7 +285,7 @@ func _meter_the_flow(crossed: int) -> void:
 	_allowance = minf(_allowance + elapsed / _grain_ms, MAX_ALLOWANCE) - crossed
 	if crossed > 0:
 		_last_crossing_ms = now
-	if _allowance >= 1.0 and _upstream > DUST_GRAINS:
+	if _allowance >= 1.0 and _upstream > 0:
 		_gate_open = true
 		_gate.disabled = true
 		if now - _last_crossing_ms > STALL_MS:
@@ -255,7 +294,7 @@ func _meter_the_flow(crossed: int) -> void:
 	else:
 		_close_gate()
 		_last_crossing_ms = now
-	if _upstream <= DUST_GRAINS and not _drained_reported:
+	if _upstream == 0 and not _drained_reported:
 		_drained_reported = true
 		drained.emit()
 
@@ -290,6 +329,21 @@ func _return_escapees() -> void:
 			var inside := Vector2(clampf(grain.position.x, -limit, limit), clampf(y, GRAIN_RADIUS, HourglassShape.HEIGHT - GRAIN_RADIUS))
 			PhysicsServer2D.body_set_state(grain.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, Transform2D(0.0, to_global(inside)))
 			grain.linear_velocity = Vector2.ZERO
+
+
+## The back of the glass, the sand in the middle of it, and the front of the glass
+## and the frame on top, so the sand sits inside the glass.
+func _build_art() -> void:
+	var back := ArtLayer.new()
+	back.draw_function = HourglassArt.draw_back
+	add_child(back)
+	var mass := SandMass.new()
+	add_child(mass)
+	mass.setup(grains, VIEW_SIZE, sand_color)
+	add_child(GlassPane.new())
+	var front := ArtLayer.new()
+	front.draw_function = HourglassArt.draw_front
+	add_child(front)
 
 
 func _build_walls() -> void:
@@ -328,29 +382,3 @@ func _build_gate() -> void:
 	_gate.shape = shape
 	_gate.position = Vector2(0.0, HourglassShape.NECK_Y)
 	body.add_child(_gate)
-
-
-func _process(_delta: float) -> void:
-	queue_redraw()
-
-
-func _draw() -> void:
-	var outline := HourglassShape.outline()
-	draw_colored_polygon(outline, Color("#EAF3FA"))
-	for i in grains.size():
-		var shade := 1.0 + (float(i % 5) - 2.0) * 0.035
-		draw_circle(grains[i].position, GRAIN_RADIUS + 0.5, Color(sand_color.r * shade, sand_color.g * shade, sand_color.b * shade))
-	# Glass: a bright edge, and a soft highlight down the left side.
-	var closed := outline.duplicate()
-	closed.append(outline[0])
-	draw_polyline(closed, Color(0.45, 0.62, 0.78, 0.95), 7.0, true)
-	var wall := HourglassShape.right_wall()
-	var shine := PackedVector2Array()
-	for point in wall:
-		shine.append(Vector2(-point.x + 26.0 + (point.x - 15.0) * 0.04, point.y))
-	draw_polyline(shine, Color(1, 1, 1, 0.55), 9.0, true)
-	# Wooden caps top and bottom.
-	var cap_half := HourglassShape.half_width(0.0) + 50.0
-	for y in [-56.0, HourglassShape.HEIGHT]:
-		draw_rect(Rect2(-cap_half, y, cap_half * 2.0, 56.0), Color("#6B4A2B"))
-		draw_rect(Rect2(-cap_half, y + (0.0 if y < 0.0 else 40.0), cap_half * 2.0, 16.0), Color("#4E3520"))

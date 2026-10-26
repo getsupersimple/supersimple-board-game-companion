@@ -18,6 +18,33 @@ static func stream(kind: String) -> AudioStreamWAV:
 	return _cache[kind]
 
 
+## A version of a sound that keeps going for as long as it is held, or null for
+## a sound that only makes sense once, like a bell. Each is a whole number of
+## cycles, so the join where it loops cannot be heard.
+static func sustained(kind: String) -> AudioStreamWAV:
+	var key := "sustained_" + kind
+	if _cache.has(key):
+		return _cache[key]
+	var wav: AudioStreamWAV = null
+	match kind:
+		"buzz":
+			wav = _render(1.0, func(t: float) -> float: return (_square(150.0, t) + _square(157.0, t)) * 0.22)
+		"horn":
+			wav = _render(1.0, func(t: float) -> float: return (fmod(t * 196.0, 1.0) * 2.0 - 1.0) * 0.38)
+		"siren":
+			# The pitch sweeps between 440 and 960 Hz twice a second, and the phase
+			# is worked out exactly so that a second is a whole number of cycles.
+			wav = _render(1.0, func(t: float) -> float:
+				var phase := TAU * (700.0 * t - 260.0 / (TAU * 2.0) * cos(TAU * 2.0 * t))
+				return sin(phase) * 0.4)
+	if wav != null:
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		wav.loop_begin = 0
+		wav.loop_end = int(SAMPLE_RATE)
+		_cache[key] = wav
+	return wav
+
+
 static func _build(kind: String) -> AudioStreamWAV:
 	match kind:
 		"alarm":

@@ -5,6 +5,8 @@ extends PanelContainer
 ## sitting on the other side of the table.
 
 signal tapped
+## The finger came off, wherever it ended up.
+signal released
 
 var upside_down := false
 
@@ -77,5 +79,8 @@ func pulse(on: bool) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		tapped.emit()
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			tapped.emit()
+		else:
+			released.emit()

@@ -30,7 +30,8 @@ func _ready() -> void:
 	add_child(column)
 
 	_area = TapArea.new()
-	_area.tapped.connect(_on_tapped)
+	_area.tapped.connect(_on_pressed)
+	_area.released.connect(_on_released)
 	column.add_child(_area)
 
 	var choices := HBoxContainer.new()
@@ -80,7 +81,6 @@ func _choose(kind: String) -> void:
 	store.preset_changed()
 	_show_sound()
 	appearance_changed.emit()
-	_sound_it()
 
 
 func _show_sound() -> void:
@@ -88,19 +88,21 @@ func _show_sound() -> void:
 	_area.look(preset.color, SoundBank.BUZZER_ICONS[_sound], "", 16)
 
 
-func _on_tapped() -> void:
-	_sound_it()
-	TimerAlert.vibrate(80)
-	_flash()
-
-
-## The buzzer is the point of this tool, so it always sounds. The haptics switch
-## still applies to the buzz in the hand.
-func _sound_it() -> void:
-	_player.stream = SoundBank.stream(_sound)
+## The buzzer sounds only while it is held down. A sound that can go on, like a
+## buzz or a siren, goes on until the finger lifts, and every sound is cut off the
+## moment it does.
+func _on_pressed() -> void:
+	var held := SoundBank.sustained(_sound)
+	_player.stream = held if held != null else SoundBank.stream(_sound)
 	_player.play()
+	TimerAlert.vibrate(60)
+	_area.self_modulate = Color(1, 1, 1, 0.55)
 
 
-func _flash() -> void:
-	_area.self_modulate = Color(1, 1, 1, 0.45)
-	create_tween().tween_property(_area, "self_modulate", Color.WHITE, 0.25)
+func _on_released() -> void:
+	_player.stop()
+	_area.self_modulate = Color.WHITE
+
+
+func _exit_tree() -> void:
+	_player.stop()

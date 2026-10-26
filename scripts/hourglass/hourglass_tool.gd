@@ -8,8 +8,8 @@ extends Control
 ## One small wheel shows the time left and counts down as the sand runs. Turn it,
 ## even while the sand runs, and sand is poured in or lifted out to match.
 
-const WORLD_SIZE := Vector2i(620, 1260)
-const GLASS_TOP := 80.0
+const WORLD_SIZE := HourglassSand.VIEW_SIZE
+const GLASS_TOP := 150.0
 const DIRECTION_SMOOTHING := 0.25
 const DEFAULT_SECONDS := 60
 
@@ -71,7 +71,7 @@ func _exit_tree() -> void:
 
 func _process(_delta: float) -> void:
 	_follow_gravity()
-	if _finished and _sand.upstream_count() > HourglassSand.DUST_GRAINS:
+	if _finished and _sand.upstream_count() > 0:
 		_finished = false
 	_show_time()
 	DisplayServer.screen_set_keep_on(_sand.is_flowing() and not _finished)
@@ -88,6 +88,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				_key_gravity = Vector2.LEFT
 			KEY_RIGHT:
 				_key_gravity = Vector2.RIGHT
+			KEY_SPACE:
+				_key_gravity = Vector2.ZERO
 
 
 ## Gravity on the glass, from the phone: what pulls along the screen's own axes.
@@ -97,8 +99,10 @@ func _follow_gravity() -> void:
 	var target_strength := 0.0
 	var sensor := Input.get_gravity()
 	if _key_gravity != null:
-		target_direction = _key_gravity
-		target_strength = 1.0
+		# Space lays the glass flat: no gravity along the screen at all.
+		if _key_gravity != Vector2.ZERO:
+			target_direction = _key_gravity
+			target_strength = 1.0
 	elif sensor.length() > 1.0:
 		var along_screen := Vector2(sensor.x, -sensor.y)
 		target_strength = clampf(along_screen.length() / sensor.length(), 0.0, 1.0)
