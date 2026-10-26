@@ -116,5 +116,5 @@ func _ensure_quick_game() -> void:
 	quick.id = QUICK_ID
 	quick.is_builtin = true
 	quick.icon = "zap"
-	quick.color = Color.WHITE
+	quick.color = Color("#1C1C1E")
 	games.push_front(quick)
