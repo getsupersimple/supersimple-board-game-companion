@@ -5,7 +5,7 @@ extends RefCounted
 ## sum to sides + 1 as on a real die.
 
 const PHI := 1.6180339887498949
-const SUPPORTED_SIDES: Array[int] = [6, 8, 12, 20]
+const SUPPORTED_SIDES: Array[int] = [4, 6, 8, 10, 12, 20]
 
 class Face:
 	var normal := Vector3.UP
@@ -17,6 +17,10 @@ class Face:
 	var inradius := 0.0
 
 var sides := 0
+## True for the d4, which has no top face: the number at the top vertex is read.
+var reads_vertex := false
+## For the d4, the number printed at each vertex (aligned with `vertices`).
+var vertex_values := PackedInt32Array()
 var vertices := PackedVector3Array()
 var faces: Array[Face] = []
 
@@ -31,10 +35,14 @@ static func create(side_count: int, circumradius: float = 0.9) -> DieShape:
 	var raw: Array[Vector3] = []
 	var normals: Array[Vector3] = []
 	match side_count:
+		4:
+			_tetrahedron(raw, normals)
 		6:
 			_cube(raw, normals)
 		8:
 			_octahedron(raw, normals)
+		10:
+			_trapezohedron(raw, normals)
 		12:
 			_dodecahedron(raw, normals)
 		20:
@@ -42,12 +50,19 @@ static func create(side_count: int, circumradius: float = 0.9) -> DieShape:
 
 	var shape := DieShape.new()
 	shape.sides = side_count
-	var scale := circumradius / raw[0].length()
+	var longest := 0.0
+	for vertex in raw:
+		longest = maxf(longest, vertex.length())
+	var scale := circumradius / longest
 	for vertex in raw:
 		shape.vertices.append(vertex * scale)
 	for normal in normals:
 		shape._add_face(normal.normalized())
-	shape._assign_values()
+	if side_count == 4:
+		shape.reads_vertex = true
+		shape.vertex_values = PackedInt32Array([1, 2, 3, 4])
+	else:
+		shape._assign_values()
 	return shape
 
 
@@ -106,6 +121,37 @@ func _assign_values() -> void:
 				faces[j].value = sides + 1 - next_value
 				next_value += 1
 				break
+
+
+static func _tetrahedron(vertices: Array[Vector3], normals: Array[Vector3]) -> void:
+	vertices.append_array([Vector3(1, 1, 1), Vector3(1, -1, -1), Vector3(-1, 1, -1), Vector3(-1, -1, 1)])
+	# Each face sits opposite one vertex.
+	for vertex in vertices:
+		normals.append(-vertex)
+
+
+## Pentagonal trapezohedron: two poles and two staggered rings, giving ten kites.
+static func _trapezohedron(vertices: Array[Vector3], normals: Array[Vector3]) -> void:
+	var cos36 := cos(deg_to_rad(36.0))
+	# Ring height that makes each kite flat when the poles are at height 1.
+	var ring_height := (1.0 - cos36) / (1.0 + cos36)
+	vertices.append(Vector3(0, 1, 0))
+	vertices.append(Vector3(0, -1, 0))
+	for k in 5:
+		var angle := deg_to_rad(72.0 * k)
+		vertices.append(Vector3(cos(angle), ring_height, sin(angle)))
+	for k in 5:
+		var angle := deg_to_rad(72.0 * k + 36.0)
+		vertices.append(Vector3(cos(angle), -ring_height, sin(angle)))
+	for k in 5:
+		var next := (k + 1) % 5
+		normals.append(_outward_normal(vertices[0], vertices[2 + k], vertices[2 + next]))
+		normals.append(_outward_normal(vertices[1], vertices[7 + k], vertices[7 + next]))
+
+
+static func _outward_normal(a: Vector3, b: Vector3, c: Vector3) -> Vector3:
+	var normal := (b - a).cross(c - a)
+	return normal if normal.dot((a + b + c) / 3.0) > 0.0 else -normal
 
 
 static func _cube(vertices: Array[Vector3], normals: Array[Vector3]) -> void:
