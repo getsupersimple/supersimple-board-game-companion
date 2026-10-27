@@ -1,4 +1,4 @@
-# Board Game Companion
+# Supersimple Board Game Companion
 
 A free, offline, open source companion for board games: dice, timers, and a buzzer. Part of the SuperSimple app suite.
 

@@ -1,4 +1,4 @@
-# Board Game Companion: design spec
+# Supersimple Board Game Companion: design spec
 
 Agreed design from the planning interview. A free, offline, open source (MIT) SuperSimple app that replaces the things lost from board games: dice, timers, buzzers.
 
