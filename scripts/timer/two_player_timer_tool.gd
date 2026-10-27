@@ -1,20 +1,17 @@
 class_name TwoPlayerTimerTool
 extends Control
-## Two big tap areas, the far one turned round for the player opposite. Only the
-## player whose turn it is can pass it. A strip between them holds the setup and,
+## A chess clock: two sides with seven-segment faces, the far one turned round for
+## the player opposite. A lamp shows whose turn it is. Only the player whose turn
+## it is can pass it. A strip between them holds the setup and,
 ## once play has started, pause and reset.
 
 signal toolbar_visible_changed(is_visible: bool)
-
-const PAUSED_GREY := Color("#8E8E93")
-const TIME_UP_RED := Color("#E5484D")
-const DIM_AMOUNT := 0.55
 
 var preset: Preset
 var store: PresetStore
 
 var _game := TwoPlayerTimer.new()
-var _halves: Array[TapArea] = []
+var _halves: Array[ClockSide] = []
 var _setup: TimerSetup
 var _controls: HBoxContainer
 var _pause_button: Button
@@ -30,8 +27,9 @@ func _ready() -> void:
 	add_child(column)
 
 	# Player 1 sits at the top of the screen, facing the other way.
-	var top := TapArea.new()
+	var top := ClockSide.new()
 	top.upside_down = true
+	top.lamp_color = preset.color
 	top.tapped.connect(_on_half_tapped.bind(1))
 	column.add_child(top)
 
@@ -49,7 +47,8 @@ func _ready() -> void:
 	_controls.add_child(_pause_button)
 	_controls.add_child(SingleTimerTool.make_reset_button(_reset))
 
-	var bottom := TapArea.new()
+	var bottom := ClockSide.new()
+	bottom.lamp_color = preset.color
 	bottom.tapped.connect(_on_half_tapped.bind(0))
 	column.add_child(bottom)
 	_halves = [bottom, top]
@@ -135,26 +134,22 @@ func _refresh_state() -> void:
 		toolbar_visible_changed.emit(show_toolbar)
 
 
-## The player whose turn it is stands out. Everything else is dimmed. Colour is
-## never the only cue: the active player has an icon, and time-up has a symbol.
+## The player whose turn it is has the lamp lit and the brighter window; the
+## other's window is dimmed. Colour is never the only cue: the lit side has no
+## symbol while it runs, a paused clock shows a pause symbol, and time-up has one.
 func _style_half(player: int) -> void:
 	var area := _halves[player]
 	area.pulse(false)
-	var base: Color = preset.color
-	var dim := base.darkened(DIM_AMOUNT)
 	match _game.state:
 		TwoPlayerTimer.State.IDLE:
-			area.look(base, "play", "", 180)
+			area.look(false, true, false, "play")
 		TwoPlayerTimer.State.RUNNING:
-			if player == _game.active:
-				area.look(base, "play", "", 220)
-			else:
-				area.look(dim, "", "", 120)
+			area.look(player == _game.active, player == _game.active, false, "")
 		TwoPlayerTimer.State.PAUSED:
-			area.look(PAUSED_GREY, "pause" if player == _game.active else "", "", 160)
+			area.look(false, false, false, "pause" if player == _game.active else "")
 		TwoPlayerTimer.State.FINISHED:
 			if player == _game.loser:
-				area.look(TIME_UP_RED, "hourglass", "", 200)
+				area.look(false, true, true, "hourglass")
 				area.pulse(true)
 			else:
-				area.look(dim, "", "", 120)
+				area.look(false, false, false, "")

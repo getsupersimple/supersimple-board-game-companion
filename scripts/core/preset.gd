@@ -40,7 +40,7 @@ static func default_color(preset_type: Type) -> Color:
 		Type.BUZZER:
 			return Color("#F5A524")
 		Type.HOURGLASS:
-			return Color("#D9A441")
+			return Color("#E5484D")
 		_:
 			return Color("#4F7CFF")
 

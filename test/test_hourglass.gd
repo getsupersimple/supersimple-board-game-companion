@@ -5,7 +5,8 @@ func test_the_glass_is_narrowest_at_the_neck_and_mirrored() -> void:
 	assert_almost_eq(HourglassShape.half_width(HourglassShape.NECK_Y), HourglassShape.NECK_HALF_WIDTH, 0.01)
 	for y in [0.0, 100.0, 300.0, 450.0, 520.0]:
 		assert_almost_eq(HourglassShape.half_width(y), HourglassShape.half_width(HourglassShape.HEIGHT - y), 0.01)
-		assert_gte(HourglassShape.half_width(y), HourglassShape.NECK_HALF_WIDTH)
+		if y >= 100.0:
+			assert_gte(HourglassShape.half_width(y), HourglassShape.NECK_HALF_WIDTH)
 
 
 func test_all_the_sand_starts_inside_the_top_chamber() -> void:
@@ -51,34 +52,87 @@ func test_time_left_is_read_from_the_sand() -> void:
 	assert_eq(sand.grains.size(), HourglassSand.BASE_GRAINS)
 
 
-func test_adding_time_pours_in_sand() -> void:
+func test_setting_a_longer_time_pours_in_sand_to_make_it_the_whole_time() -> void:
 	var sand := _glass(60)
 	var before := sand.grains.size()
-	sand.add_time(30000)
-	assert_almost_eq(float(sand.remaining_ms()), 90000.0, 400.0)
+	sand.set_duration(90000)
+	assert_almost_eq(float(sand.total_ms()), 90000.0, 1.0)
 	assert_gt(sand.grains.size(), before)
 
 
-func test_taking_time_away_lifts_sand_out() -> void:
+func test_setting_a_shorter_time_lifts_sand_out() -> void:
 	var sand := _glass(60)
 	var before := sand.grains.size()
-	sand.add_time(-20000)
+	sand.set_duration(40000)
 	await wait_physics_frames(2)
-	assert_almost_eq(float(sand.remaining_ms()), 40000.0, 400.0)
+	assert_almost_eq(float(sand.total_ms()), 40000.0, 1.0)
 	assert_lt(sand.grains.size(), before)
+
+
+func test_setting_the_same_time_again_changes_nothing() -> void:
+	var sand := _glass(60)
+	sand.set_duration(60000)
+	sand.set_duration(60000)
+	assert_almost_eq(float(sand.total_ms()), 60000.0, 1.0)
+
+
+func test_less_time_empties_the_emptier_side_first_then_the_fuller() -> void:
+	var sand := _glass(60)
+	sand.gravity_strength = 1.0
+	await wait_seconds(4.0)
+	var above := 0
+	for grain in sand.grains:
+		if grain.position.y < HourglassShape.NECK_Y:
+			above += 1
+	var below := sand.grains.size() - above
+	assert_gt(above, 0)
+	assert_gt(below, 0)
+	var emptier_is_upper := above < below
+	var emptier := mini(above, below)
+	var fuller := maxi(above, below)
+	var one_grain := sand.total_ms() / sand.grains.size()
+	sand.set_duration(sand.total_ms() - (emptier - 2) * one_grain)
+	assert_eq(sand.grains.size(), above + below - emptier + 2, "only the emptier side gave sand so far")
+	sand.set_duration(sand.total_ms() - (emptier + 5) * one_grain)
+	var left_in_emptier := 0
+	for grain in sand.grains:
+		if (grain.position.y < HourglassShape.NECK_Y) == emptier_is_upper:
+			left_in_emptier += 1
+	assert_eq(left_in_emptier, 0, "the emptier side is gone")
+	assert_lt(sand.grains.size(), fuller, "then the fuller side gave some")
+
+
+func test_more_time_goes_onto_the_fuller_side() -> void:
+	var sand := _glass(60)
+	sand.gravity_strength = 1.0
+	await wait_seconds(4.0)
+	var above := 0
+	for grain in sand.grains:
+		if grain.position.y < HourglassShape.NECK_Y:
+			above += 1
+	var upper_is_fuller := above > sand.grains.size() - above
+	var count := sand.grains.size()
+	sand.set_duration(sand.total_ms() + 10000)
+	var new_above := 0
+	for grain in sand.grains.slice(count):
+		if grain.position.y < HourglassShape.NECK_Y:
+			new_above += 1
+	var added := sand.grains.size() - count
+	assert_gt(added, 0)
+	assert_eq(new_above == added, upper_is_fuller, "all of it on the fuller side")
 
 
 func test_time_cannot_go_below_nothing() -> void:
 	var sand := _glass(10)
-	sand.add_time(-60000)
-	assert_eq(sand.remaining_ms(), 0)
+	sand.set_duration(0)
+	assert_eq(sand.grains.size(), 0)
 
 
 func test_a_huge_time_is_held_by_making_each_grain_worth_more() -> void:
 	var sand := _glass(60)
-	sand.add_time(90 * 60 * 1000)
-	assert_lte(sand.upstream_count(), HourglassSand.MAX_UPSTREAM)
-	assert_almost_eq(float(sand.remaining_ms()), 90.0 * 60.0 * 1000.0 + 60000.0, 20000.0)
+	sand.set_duration(90 * 60 * 1000)
+	assert_lte(sand.grains.size(), HourglassSand.MAX_UPSTREAM)
+	assert_almost_eq(float(sand.total_ms()), 90.0 * 60.0 * 1000.0, 1.0)
 
 
 func test_a_short_time_uses_fewer_grains_so_the_neck_can_keep_up() -> void:
@@ -89,7 +143,7 @@ func test_a_short_time_uses_fewer_grains_so_the_neck_can_keep_up() -> void:
 
 func test_resetting_pours_back_all_the_time_that_was_set() -> void:
 	var sand := _glass(60)
-	sand.add_time(30000)
+	sand.set_duration(90000)
 	sand.reset()
 	assert_almost_eq(float(sand.remaining_ms()), 90000.0, 600.0)
 
@@ -132,30 +186,6 @@ func test_the_hourglass_is_a_preset_type_that_saves_and_loads() -> void:
 	assert_eq(Preset.Type.BUZZER, 3, "older presets keep their number")
 
 
-func test_a_glass_lying_flat_pulls_sand_to_the_middle_of_its_curve() -> void:
-	# Off to the right it pulls left, off to the left it pulls right.
-	assert_lt(HourglassSand.depth_pull(Vector2(80, 200)).x, 0.0)
-	assert_gt(HourglassSand.depth_pull(Vector2(-80, 200)).x, 0.0)
-	assert_almost_eq(HourglassSand.depth_pull(Vector2(0, 200)).x, 0.0, 0.001)
-
-
-func test_a_glass_lying_flat_pulls_sand_towards_the_wide_part_of_each_bulb() -> void:
-	# Near the neck of the top bulb the floor rises, so the sand slides up away from it.
-	assert_lt(HourglassSand.depth_pull(Vector2(0, 450)).y, 0.0)
-	# The bottom bulb is the mirror image: the sand slides down.
-	assert_gt(HourglassSand.depth_pull(Vector2(0, HourglassShape.HEIGHT - 450)).y, 0.0)
-	# At the widest part of the belly the floor is level along the glass: no pull along it.
-	assert_almost_eq(HourglassSand.depth_pull(Vector2(0, HourglassShape.BELLY_CENTRE_Y)).y, 0.0, 0.05)
-	# Between the cap and the belly, where the glass widens, the sand slides towards the belly.
-	assert_gt(HourglassSand.depth_pull(Vector2(0, 50)).y, 0.0)
-
-
-func test_the_pull_of_the_curve_never_exceeds_gravity() -> void:
-	for y in [10.0, 200.0, 450.0, 540.0, 560.0, 900.0]:
-		for x in [-200.0, -50.0, 0.0, 50.0, 200.0]:
-			assert_lte(HourglassSand.depth_pull(Vector2(x, y)).length(), 1.0001)
-
-
 func test_sand_lying_flat_comes_to_rest_and_does_not_run() -> void:
 	var sand := _glass(60)
 	sand.gravity_strength = 0.0
@@ -185,82 +215,184 @@ func test_every_last_grain_goes_through_before_time_is_up() -> void:
 	assert_eq(sand.remaining_ms(), 0)
 
 
-func test_the_glass_shader_gets_the_same_shape_as_the_physics() -> void:
-	var texture := HourglassShape.widths_texture()
-	assert_eq(texture.get_width(), int(HourglassShape.HEIGHT) + 1)
-	var image := texture.get_image()
-	for y in [0, 205, 400, 550, 700, 1100]:
-		assert_almost_eq(image.get_pixel(y, 0).r, HourglassShape.half_width(float(y)), 0.3, "width at %d" % y)
-	# The slope changes sign at the neck: the glass narrows, then widens again.
-	assert_lt(image.get_pixel(450, 0).g, 0.0)
-	assert_gt(image.get_pixel(650, 0).g, 0.0)
-
-
-func test_the_glass_pane_covers_the_widest_part_of_the_glass() -> void:
-	var pane := GlassPane.new()
-	add_child_autofree(pane)
-	assert_gte(pane.size.x * 0.5, HourglassShape.half_width(HourglassShape.BELLY_CENTRE_Y))
-	assert_almost_eq(pane.size.y, HourglassShape.HEIGHT, 0.01)
-
-
-func _count_taps(sand: HourglassSand) -> Array:
-	var taps := []
-	sand.grain_tapped.connect(func(strength: float, on_glass: bool) -> void: taps.append([strength, on_glass]))
-	return taps
-
-
-func test_sand_falling_patters_softly() -> void:
+func test_sand_pouring_makes_a_soft_shh() -> void:
+	AppSettings.sand_sound = true
 	var sand := _glass(30)
-	var taps := _count_taps(sand)
 	sand.gravity_strength = 1.0
 	sand.gravity_direction = Vector2.DOWN
-	await wait_seconds(4.0)
-	assert_gt(taps.size(), 8, "grains tap as they land")
-	var loudest := 0.0
-	for tap in taps:
-		loudest = maxf(loudest, tap[0])
-		assert_between(tap[0], 0.0, 1.0)
-	assert_gt(loudest, 0.0)
+	await wait_seconds(3.0)
+	assert_true(sand._pour.playing, "the shh plays while sand pours")
+	assert_lt(sand._pour.volume_db, -30.0, "and it is soft")
+	assert_gt(sand._pour.volume_db, -61.0)
 
 
-func test_a_resting_glass_is_quiet() -> void:
+func test_the_shh_fades_in_at_the_start_and_out_before_the_end() -> void:
+	AppSettings.sand_sound = true
+	var sand := _glass(10)
+	sand.gravity_strength = 1.0
+	sand.gravity_direction = Vector2.DOWN
+	await wait_seconds(0.3)
+	var early := sand._pour_level
+	await wait_seconds(3.0)
+	var middle := sand._pour_level
+	assert_lt(early, middle, "it fades in rather than starting at once")
+	assert_gt(middle, 0.9, "at full by the middle")
+	var lowest := 1.0
+	for _step in 80:
+		await wait_seconds(0.1)
+		if sand.remaining_ms() < 600:
+			lowest = minf(lowest, sand._pour_level)
+	assert_lt(lowest, 0.4, "nearly faded away as the last sand goes through")
+
+
+func test_a_resting_glass_is_silent() -> void:
+	AppSettings.sand_sound = true
 	var sand := _glass(30)
 	sand.gravity_strength = 1.0
 	sand.gravity_direction = Vector2.RIGHT
 	await wait_seconds(3.0)
-	var taps := _count_taps(sand)
-	await wait_seconds(1.5)
-	assert_lte(taps.size(), 2, "a few stray taps at most once the sand has settled")
+	assert_false(sand._pour.playing)
 
 
-func test_a_tap_plays_a_glass_tink_or_a_sand_pat_and_follows_the_switches() -> void:
-	AppSettings.sand_sound = true
-	var sand := _glass(30)
-	sand._play_tap(0.8, true)
-	var played := 0
-	for voice in sand._voices:
-		if voice.playing:
-			played += 1
-	assert_eq(played, 1)
-	for voice in sand._voices:
-		voice.stop()
+func test_the_shh_follows_the_switches() -> void:
 	AppSettings.sand_sound = false
-	sand._play_tap(0.8, false)
-	for voice in sand._voices:
-		assert_false(voice.playing, "silent when switched off")
+	var sand := _glass(30)
+	sand.gravity_strength = 1.0
+	sand.gravity_direction = Vector2.DOWN
+	await wait_seconds(2.0)
+	assert_false(sand._pour.playing, "silent when switched off")
 	AppSettings.sand_sound = true
 	sand.muted = true
-	sand._play_tap(0.8, true)
-	for voice in sand._voices:
-		assert_false(voice.playing, "silent when out of sight")
+	await wait_seconds(1.0)
+	assert_false(sand._pour.playing, "silent when out of sight")
+	sand.muted = false
+	await wait_seconds(1.0)
+	assert_true(sand._pour.playing, "and back again")
 
 
-func test_every_grain_sound_exists_and_is_tiny_and_soft() -> void:
-	for on_glass in [true, false]:
-		for variant in HourglassSand.TAP_VARIANTS:
-			var tap := SoundBank.grain_tap(on_glass, variant)
-			assert_lt(tap.data.size() / 2.0 / SoundBank.SAMPLE_RATE, 0.1, "shorter than a tenth of a second")
-			var peak := 0.0
-			for i in tap.data.size() / 2:
-				peak = maxf(peak, absf(tap.data.decode_s16(i * 2) / 32768.0))
-			assert_between(peak, 0.15, 0.85, "audible but not harsh")
+func test_the_pour_sound_loops_and_is_audible_but_not_harsh() -> void:
+	var loop := SoundBank.sand_loop()
+	assert_eq(loop.loop_mode, AudioStreamWAV.LOOP_FORWARD)
+	assert_eq(loop.loop_end, loop.data.size() / 2)
+	var peak := 0.0
+	for i in loop.data.size() / 2:
+		peak = maxf(peak, absf(loop.data.decode_s16(i * 2) / 32768.0))
+	assert_between(peak, 0.5, 0.9)
+
+
+func test_nothing_moves_while_the_sand_is_frozen_and_it_runs_again_after() -> void:
+	var sand := HourglassSand.new()
+	add_child_autofree(sand)
+	sand.gravity_strength = 1.0
+	sand.set_total_ms(20000)
+	await wait_seconds(0.5)
+	sand.frozen = true
+	var before := PackedVector2Array()
+	for grain in sand.grains:
+		before.append(grain.position)
+	var remaining := sand.remaining_ms()
+	await wait_seconds(1.0)
+	for i in sand.grains.size():
+		assert_eq(sand.grains[i].position, before[i], "grain %d stayed put" % i)
+	assert_eq(sand.remaining_ms(), remaining, "time stood still")
+	sand.set_duration(sand.total_ms() + 5000)
+	assert_true(sand.grains[sand.grains.size() - 1].freeze, "sand poured in while frozen is held too")
+	sand.frozen = false
+	await wait_seconds(1.5)
+	assert_lt(sand.remaining_ms(), remaining + 5000, "and it runs again")
+
+
+func test_only_the_wheel_turns_over_with_the_phone_and_there_is_no_reset_button() -> void:
+	var preset := Preset.new()
+	preset.type = Preset.Type.HOURGLASS
+	var tool := HourglassTool.new()
+	tool.preset = preset
+	tool.store = PresetStore.new()
+	add_child_autofree(tool)
+	await wait_frames(2)
+	assert_eq(tool.find_children("*", "HoldButton", true, false).size(), 0, "no reset button")
+	# A phone is always turned over through sideways, never straight from one to the other.
+	tool._key_gravity = Vector2.LEFT
+	await wait_seconds(0.8)
+	assert_almost_eq(tool._wheel.rotation, 0.0, 0.01, "on its side it has not turned")
+	tool._key_gravity = Vector2.UP
+	await wait_seconds(1.0)
+	assert_almost_eq(tool._wheel.rotation, PI, 0.01, "upside down")
+	tool._key_gravity = Vector2.LEFT
+	await wait_seconds(0.8)
+	assert_almost_eq(tool._wheel.rotation, PI, 0.01, "stays turned on its side")
+	tool._key_gravity = Vector2.DOWN
+	await wait_seconds(1.0)
+	assert_almost_eq(tool._wheel.rotation, 0.0, 0.01, "upright again")
+
+
+func test_the_wheel_counts_down_until_it_is_touched_then_shows_the_whole_time() -> void:
+	var preset := Preset.new()
+	preset.type = Preset.Type.HOURGLASS
+	preset.data["seconds"] = 30
+	var tool := HourglassTool.new()
+	tool.preset = preset
+	tool.store = PresetStore.new()
+	add_child_autofree(tool)
+	await wait_frames(2)
+	tool._sand.gravity_strength = 1.0
+	tool._key_gravity = Vector2.DOWN
+	await wait_seconds(3.0)
+	assert_true(tool._wheel.counting, "its own colour while counting")
+	assert_lt(tool._wheel.seconds, 30, "fewer seconds than the whole glass")
+	tool._wheel.dragging = true
+	tool._wheel.grabbed.emit(true)
+	assert_false(tool._wheel.counting)
+	assert_eq(tool._wheel.seconds, 30, "the whole time while it is being set")
+	tool._wheel.dragging = false
+	tool._wheel.grabbed.emit(false)
+	await wait_frames(2)
+	assert_true(tool._wheel.counting)
+	assert_lt(tool._wheel.seconds, 30)
+
+
+func test_the_chambers_are_straight_tubes_with_flat_ends() -> void:
+	var tube := HourglassShape.TUBE_RADIUS
+	assert_almost_eq(HourglassShape.half_width(HourglassShape.TUBE_END_Y - 40.0), tube, 0.5, "a straight tube")
+	assert_almost_eq(HourglassShape.half_width(100.0), tube, 0.01, "all the way up")
+	assert_gt(HourglassShape.half_width(0.0), tube - HourglassShape.END_CORNER - 1.0, "the end is flat, not a point")
+	assert_almost_eq(HourglassShape.half_width(HourglassShape.HEIGHT), HourglassShape.half_width(0.0), 0.01)
+	assert_lt(HourglassShape.half_width(HourglassShape.NECK_Y - 60.0), tube, "then a cone to the neck")
+
+
+func test_tilting_a_glass_with_an_empty_side_does_not_finish_it() -> void:
+	var sand := _glass(8)
+	var finished := [false]
+	sand.drained.connect(func() -> void: finished[0] = true)
+	sand.gravity_direction = Vector2.DOWN
+	await wait_seconds(11.0)
+	assert_true(finished[0], "it finishes once the sand has run through")
+	finished[0] = false
+	sand.gravity_direction = Vector2.LEFT
+	await wait_seconds(0.5)
+	sand.gravity_direction = Vector2.DOWN
+	await wait_seconds(2.0)
+	assert_false(finished[0], "the top is empty, so tilting it again does not chime")
+
+
+func test_the_sand_picture_is_cut_to_the_shape_of_the_glass() -> void:
+	var texture := HourglassShape.widths_texture()
+	assert_eq(texture.get_width(), int(HourglassShape.HEIGHT) + 1)
+	var image := texture.get_image()
+	for y in [0, 200, 400, 550, 700, 1100]:
+		assert_almost_eq(image.get_pixel(y, 0).r, HourglassShape.half_width(float(y)), 0.3, "width at %d" % y)
+
+
+func test_sand_moved_about_makes_the_shh_even_when_none_pours() -> void:
+	AppSettings.sand_sound = true
+	var sand := _glass(30)
+	sand.gravity_strength = 1.0
+	sand.gravity_direction = Vector2.LEFT
+	await wait_seconds(4.0)
+	assert_false(sand._pour.playing, "settled on its side, it is quiet")
+	sand.gravity_direction = Vector2.RIGHT
+	var heard := false
+	for _step in 20:
+		await wait_seconds(0.1)
+		heard = heard or sand._pour.playing
+	assert_true(heard, "sliding across the glass is heard")

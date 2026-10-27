@@ -3,9 +3,10 @@ extends Node2D
 ## Draws the sand as one lit mass instead of a heap of circles. Every grain is
 ## drawn as a soft blob into a hidden picture, where blobs that touch add up. A
 ## shader then turns the picture into a surface: wherever the blobs add up past
-## a threshold there is sand, shaded by the slope of the pile.
+## a threshold there is sand, shaded by the slope of the pile. It is cut
+## to the shape of the glass, so no sand is ever drawn outside it.
 
-const BLOB_RADIUS := 13.0
+const BLOB_RADIUS := 7.0
 
 var grains: Array[RigidBody2D]
 
@@ -42,6 +43,11 @@ func setup(source: Array[RigidBody2D], size: Vector2i, color: Color) -> void:
 	shader_material.shader = load("res://scripts/hourglass/sand.gdshader")
 	shader_material.set_shader_parameter("density", _density.get_texture())
 	shader_material.set_shader_parameter("sand", color)
+	# Sand is only drawn where the glass is, whatever a grain does at its edge.
+	shader_material.set_shader_parameter("widths", HourglassShape.widths_texture())
+	shader_material.set_shader_parameter("glass_top", get_parent().global_position)
+	shader_material.set_shader_parameter("glass_height", HourglassShape.HEIGHT)
+	shader_material.set_shader_parameter("view_size", Vector2(size))
 	picture.material = shader_material
 	add_child(picture)
 

@@ -6,6 +6,8 @@ extends Control
 ## is counting down, so it is fine to turn it while the time runs.
 
 signal time_adjusted(delta_seconds: int)
+## A finger has touched the wheel, or let go of it.
+signal grabbed(held: bool)
 
 const ROW_HEIGHT := 84.0
 const VISIBLE_ROWS := 3
@@ -23,6 +25,11 @@ var seconds := 0
 var dragging := false
 ## Time is up: the time is drawn in red.
 var alert := false
+## The wheel is showing a time running out, not one being set, so it is drawn in
+## another colour.
+var counting := false
+## A faint see-through panel behind the numbers, for a wheel that sits over a picture.
+var backed := false
 
 var _drag_remainder := 0.0
 
@@ -34,8 +41,8 @@ func _ready() -> void:
 
 
 ## Shows a time, unless a finger is turning the wheel.
-func show_seconds(value: int) -> void:
-	if dragging:
+func show_seconds(value: int, force := false) -> void:
+	if dragging and not force:
 		return
 	seconds = clampi(value, 0, MAX_SECONDS)
 	queue_redraw()
@@ -47,6 +54,7 @@ func _gui_input(event: InputEvent) -> void:
 			dragging = event.pressed
 			_drag_remainder = 0.0
 			queue_redraw()
+			grabbed.emit(dragging)
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_adjust(SLOW_STEP)
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -79,11 +87,16 @@ func _adjust(delta: int) -> void:
 func _draw() -> void:
 	var font := get_theme_default_font()
 	var middle := size.y / 2.0
+	if backed:
+		var panel := StyleBoxFlat.new()
+		panel.bg_color = Color(0.98, 0.96, 0.92, 0.3)
+		panel.set_corner_radius_all(40)
+		draw_style_box(panel, Rect2(Vector2.ZERO, size))
 	var band := StyleBoxFlat.new()
 	band.bg_color = Color(0, 0, 0, 0.08)
 	band.set_corner_radius_all(28)
 	draw_style_box(band, Rect2(0.0, middle - ROW_HEIGHT / 2.0, size.x, ROW_HEIGHT))
-	var ink := Color("#E5484D") if alert else Color("#1C1C1E")
+	var ink := Color("#E5484D") if alert else (Color("#1F8A70") if counting else Color("#1C1C1E"))
 	for offset in range(-1, 2):
 		var shown := seconds + offset * SLOW_STEP
 		if shown < 0 or shown > MAX_SECONDS:

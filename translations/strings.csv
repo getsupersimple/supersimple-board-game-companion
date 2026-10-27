@@ -24,3 +24,11 @@ SETTINGS_TIMER_BUZZER,Timer buzzer
 SETTINGS_HAPTICS,Vibration
 PRESET_HOURGLASS,Hourglass
 SETTINGS_SAND_SOUND,Sand sound
+SETTINGS_CREDITS,Credits
+CREDITS_BLURB,"I got tired of apps constantly asking me to sign up and showing me ads. I bought my phone, and I just want apps that work. Offline. Without an account. Ever.
+
+That's why I started building Supersimple apps: they do what they say and don't try to siphon your data to make money in the background. I release all of them as open source.
+
+If this app is useful to you, you can chip in below. Thank you!"
+CREDITS_SUPPORT,Support me on PayPal
+CREDITS_SOURCE,Open source on GitHub

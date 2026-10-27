@@ -9,6 +9,7 @@ const ROW_HEIGHT := 200
 const INK := Color("#1C1C1E")
 
 var _toggles: Dictionary = {}
+var _credits: CreditsScreen
 
 
 func _ready() -> void:
@@ -39,6 +40,30 @@ func _ready() -> void:
 	column.add_child(_make_row(["timer", "bell"], "timer_buzzer", "SETTINGS_TIMER_BUZZER"))
 	column.add_child(_make_row(["hourglass", "volume-2"], "sand_sound", "SETTINGS_SAND_SOUND"))
 	column.add_child(_make_row(["vibrate"], "haptics", "SETTINGS_HAPTICS"))
+	column.add_child(_make_credits_link())
+
+	_credits = CreditsScreen.new()
+	_credits.visible = false
+	_credits.back_pressed.connect(func() -> void: _credits.visible = false)
+	add_child(_credits)
+
+
+## A small link at the end that opens the credits screen.
+func _make_credits_link() -> Control:
+	var link := Button.new()
+	link.text = tr("SETTINGS_CREDITS")
+	link.icon = IconLibrary.get_icon("heart")
+	link.expand_icon = true
+	link.flat = true
+	link.focus_mode = Control.FOCUS_NONE
+	link.custom_minimum_size = Vector2(0, 120)
+	link.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	link.add_theme_font_size_override("font_size", 44)
+	link.add_theme_constant_override("icon_max_width", 56)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color", "icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
+		link.add_theme_color_override(state, INK)
+	link.pressed.connect(func() -> void: _credits.visible = true)
+	return link
 
 
 func _make_row(icons: Array, setting: String, label_key: String) -> Control:

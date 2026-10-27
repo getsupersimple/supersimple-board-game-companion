@@ -45,11 +45,47 @@ static func sustained(kind: String) -> AudioStreamWAV:
 	return wav
 
 
-## One tiny grain tapping: on the glass, a bright little tink that dies at once; on
-## other sand, a dull soft pat. Three of each, a little different, so a run of
-## them does not sound like one sound over and over.
-static func grain_tap(on_glass: bool, variant: int) -> AudioStreamWAV:
-	return stream(("grain_glass_%d" if on_glass else "grain_sand_%d") % variant)
+## The soft shh of sand pouring, a second and a half of filtered noise that loops.
+## The noise has the lows and the highest highs taken out, so it hushes and does not
+## hiss, and its end is faded into its start so the join cannot be heard.
+static func sand_loop() -> AudioStreamWAV:
+	if _cache.has("sand_loop"):
+		return _cache["sand_loop"]
+	var length := int(SAMPLE_RATE * 1.5)
+	var overlap := int(SAMPLE_RATE * 0.2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var raw := PackedFloat32Array()
+	raw.resize(length + overlap)
+	var bright := 0.0
+	var dull := 0.0
+	for i in raw.size():
+		bright += 0.45 * (rng.randf_range(-1.0, 1.0) - bright)
+		dull += 0.12 * (bright - dull)
+		raw[i] = bright - dull
+	var peak := 0.0
+	var shaped := PackedFloat32Array()
+	shaped.resize(length)
+	for i in length:
+		var value := raw[i]
+		if i < overlap:
+			var into := float(i) / overlap
+			value = raw[i] * sqrt(into) + raw[length + i] * sqrt(1.0 - into)
+		shaped[i] = value
+		peak = maxf(peak, absf(value))
+	var data := PackedByteArray()
+	data.resize(length * 2)
+	for i in length:
+		data.encode_s16(i * 2, int(shaped[i] / peak * 0.8 * 32767.0))
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = SAMPLE_RATE
+	wav.data = data
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end = length
+	_cache["sand_loop"] = wav
+	return wav
 
 
 static func _build(kind: String) -> AudioStreamWAV:
@@ -101,18 +137,6 @@ static func _build(kind: String) -> AudioStreamWAV:
 				for note in notes:
 					sound += _tube(t, note[0], note[1], note[2])
 				return sound)
-		"grain_glass_0", "grain_glass_1", "grain_glass_2":
-			var pitch: float = [3600.0, 4350.0, 5100.0][kind.right(1).to_int()]
-			return _render(0.06, func(t: float) -> float:
-				return (_mode(t, 0.0, pitch, 230.0, 0.42) + _mode(t, 0.0, pitch * 1.52, 320.0, 0.24) \
-						+ _noise(t * 1.3) * exp(-t * 800.0) * 0.14) * minf(t / 0.0006, 1.0))
-		"grain_sand_0", "grain_sand_1", "grain_sand_2":
-			var which: int = kind.right(1).to_int()
-			var low := [0.0]
-			return _render(0.05, func(t: float) -> float:
-				# Noise run through a gentle low-pass, so it is a pat and not a click.
-				low[0] += 0.22 * (_noise(t * (1.0 + 0.37 * which) + 0.011 * which) - low[0])
-				return (low[0] * 1.5 * exp(-t * 150.0) + _mode(t, 0.0, 330.0 + 85.0 * which, 140.0, 0.20)) * minf(t / 0.0008, 1.0))
 		"tick":
 			# A short click for a die knocking on something.
 			return _render(0.06, func(t: float) -> float:

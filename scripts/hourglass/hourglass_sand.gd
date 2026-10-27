@@ -11,15 +11,14 @@ extends Node2D
 
 signal drained
 ## A grain has hit something: how hard (0 to 1), and whether it hit the glass or other sand.
-signal grain_tapped(strength: float, on_glass: bool)
 
 ## The size of the picture the glass is drawn into, in pixels.
 const VIEW_SIZE := Vector2i(660, 1430)
 ## About how many grains a glass starts with.
-const BASE_GRAINS := 300
+const BASE_GRAINS := 550
 ## The most grains the falling side holds. Past it, each grain is worth more time.
-const MAX_UPSTREAM := 460
-const GRAIN_RADIUS := 7.0
+const MAX_UPSTREAM := 900
+const GRAIN_RADIUS := 3.6
 const GRAVITY := 2000.0
 const GATE_THICKNESS := 14.0
 const WALL_THICKNESS := 40.0
@@ -38,27 +37,30 @@ const TAIL_PULL := 0.9
 const STALL_MS := 300
 const TAP_REACH := 110.0
 const TAP_SPEED := 90.0
-## The patter of grains: a knock must change a grain's speed by at least this much
-## (pixels a second) to be heard, and one that changes it by TAP_HARD is as loud as
-## it gets. The loudest tap is still soft.
-const TAP_MIN_CHANGE := 420.0
-const TAP_HARD := 1500.0
-const TAP_QUIET_DB := -50.0
-const TAP_LOUD_DB := -27.0
-const TAP_VOICES := 8
-const TAPS_PER_FRAME := 3
-const TAP_GAP_MS := 9
-const TAP_VARIANTS := 3
-## Sand lying in the curve of the glass loses its speed to the glass.
-const LYING_DAMPING := 5.0
-## Keeps the curve's pull finite where the floor rises steeply at the glass wall.
-const SOFT_FLOOR := 40.0
+## The soft shh of sand: it fades in when grains start crossing the neck or the sand
+## is stirred about,
+## fades away over the last moments before the sand runs out, and even at its
+## loudest it is quiet.
+const POUR_DB := -36.0
+const POUR_QUIET_DB := -60.0
+const POUR_HOLD_MS := 400
+const POUR_ATTACK := 1.4
+const POUR_RELEASE := 4.0
+## The shh starts to fade this long before the last of the sand is through.
+const POUR_FADE_MS := 2000.0
+## Sand shifting about makes the same sound: a grain this fast is moving, and the
+## shh reaches full when this share of the grains are.
+const MOVING_SPEED := 150.0
+const MOVING_SHARE_QUIET := 0.03
+const MOVING_SHARE_FULL := 0.25
 
 ## Which way gravity pulls on the screen, from 0 (none) to 1 (a full pull). The
 ## direction is a unit vector in screen axes, with y pointing down the screen.
 var gravity_direction := Vector2.DOWN
 var gravity_strength := 1.0
-var sand_color := Color("#D9A441")
+var sand_color := Color("#9B59D0")
+## The colour of the caps on the glass.
+var cap_color := Color("#E5484D")
 
 var grains: Array[RigidBody2D] = []
 
@@ -72,15 +74,24 @@ var _last_crossing_ms := 0
 var _was_flowing := false
 var _upstream := 0
 var _drained_reported := false
+## Some sand has run through since the glass was last full or last drained.
+var _sand_has_passed := false
 var _material: PhysicsMaterial
 ## Muted while the glass is out of sight, so it does not hiss from behind another screen.
 var muted := false
+## Holds every grain still, for as long as it is true, and lets them go again after.
+var frozen := false:
+	set(value):
+		frozen = value
+		for grain in grains:
+			_set_frozen(grain)
+		if not frozen:
+			_wake_everything()
 
 var _total_when_ready := 60000
-var _voices: Array[AudioStreamPlayer] = []
-var _next_voice := 0
-var _last_velocities := PackedVector2Array()
-var _last_tap_ms := 0
+var _pour: AudioStreamPlayer
+var _pour_level := 0.0
+var _last_pour_ms := -100000
 var _last_state := Vector3.ZERO
 
 
@@ -91,11 +102,9 @@ func _ready() -> void:
 	_build_walls()
 	_build_gate()
 	_build_art()
-	for i in TAP_VOICES:
-		var voice := AudioStreamPlayer.new()
-		add_child(voice)
-		_voices.append(voice)
-	grain_tapped.connect(_play_tap)
+	_pour = AudioStreamPlayer.new()
+	_pour.stream = SoundBank.sand_loop()
+	add_child(_pour)
 	set_total_ms(_total_when_ready)
 
 
@@ -116,6 +125,7 @@ func set_total_ms(total_ms: int) -> void:
 	_close_gate()
 	_was_flowing = false
 	_drained_reported = false
+	_sand_has_passed = false
 
 
 ## Pours the sand back into the top chamber, ready to run again.
@@ -144,48 +154,47 @@ func is_flowing() -> bool:
 	return gravity_strength > 0.05 and absf(gravity_direction.y) * gravity_strength >= FLOW_THRESHOLD
 
 
-## Adds or takes away time. More sand is poured in at the far end of the side it
-## is falling from, or the sand furthest from the neck is lifted out.
-func add_time(delta_ms: int) -> void:
-	var wanted := maxi(remaining_ms() + delta_ms, 0)
+## Changes how long the whole glass lasts, which is all of the sand in it, wherever
+## it is. Less time lifts sand out of the emptier chamber first, then the fuller one.
+## More time is poured onto the fuller chamber.
+func set_duration(duration_ms: int) -> void:
 	var target := 0
-	if wanted > 0:
-		target = maxi(int(round(wanted / _grain_ms)), 1)
-	# Each grain is worth no less than the neck can pass, and no more than the
-	# glass has room for.
-	if _grain_ms < MIN_GRAIN_MS and wanted > 0:
-		_grain_ms = MIN_GRAIN_MS
-		target = int(round(wanted / _grain_ms))
-	if target > MAX_UPSTREAM:
-		_grain_ms = wanted / float(MAX_UPSTREAM)
-		target = MAX_UPSTREAM
-	_set_upstream_count(target)
+	if duration_ms > 0:
+		# Each grain is worth no less than the neck can pass, and no more than the
+		# glass has room for.
+		target = clampi(int(round(duration_ms / maxf(_grain_ms, MIN_GRAIN_MS))), 1, MAX_UPSTREAM)
+		_grain_ms = duration_ms / float(target)
+	var above := 0
+	for side in _sides:
+		if side < 0:
+			above += 1
+	var below := grains.size() - above
+	var upper_is_fuller := above > below or (above == below and gravity_direction.y >= 0.0)
+	var difference := target - grains.size()
+	if difference > 0:
+		for spot in _pour_positions(difference, upper_is_fuller):
+			_add_grain(spot)
+	elif difference < 0:
+		var emptier_first: Array[RigidBody2D] = []
+		var fuller_after: Array[RigidBody2D] = []
+		for i in grains.size():
+			var in_upper := _sides[i] < 0
+			(fuller_after if in_upper == upper_is_fuller else emptier_first).append(grains[i])
+		var by_distance := func(a: RigidBody2D, b: RigidBody2D) -> bool:
+			return absf(a.position.y - HourglassShape.NECK_Y) > absf(b.position.y - HourglassShape.NECK_Y)
+		emptier_first.sort_custom(by_distance)
+		fuller_after.sort_custom(by_distance)
+		for grain in (emptier_first + fuller_after).slice(0, -difference):
+			grains.erase(grain)
+			grain.queue_free()
+	_rebuild_sides()
+	_wake_everything()
 
 
 func _plan(total_ms: int) -> int:
 	var grain_ms := maxf(total_ms / float(BASE_GRAINS), MIN_GRAIN_MS)
 	var count := int(round(total_ms / grain_ms))
 	return clampi(count, 1, MAX_UPSTREAM)
-
-
-func _set_upstream_count(target: int) -> void:
-	var difference := target - _upstream
-	var upper_side := gravity_direction.y >= 0.0
-	if difference > 0:
-		for spot in _pour_positions(difference, upper_side):
-			_add_grain(spot)
-	elif difference < 0:
-		var candidates: Array[RigidBody2D] = []
-		for i in grains.size():
-			if (_sides[i] < 0) == upper_side:
-				candidates.append(grains[i])
-		candidates.sort_custom(func(a: RigidBody2D, b: RigidBody2D) -> bool:
-			return absf(a.position.y - HourglassShape.NECK_Y) > absf(b.position.y - HourglassShape.NECK_Y))
-		for i in mini(-difference, candidates.size()):
-			grains.erase(candidates[i])
-			candidates[i].queue_free()
-	_rebuild_sides()
-	_wake_everything()
 
 
 ## Where new sand goes: in rows above the top of the pile, away from the neck.
@@ -199,7 +208,7 @@ func _pour_positions(count: int, upper_side: bool) -> PackedVector2Array:
 	var spots := PackedVector2Array()
 	var y := edge + direction * GRAIN_RADIUS * 2.6
 	while spots.size() < count:
-		var clamped := clampf(y, GRAIN_RADIUS * 1.2, HourglassShape.HEIGHT - GRAIN_RADIUS * 1.2)
+		var clamped := clampf(y, HourglassShape.CAP_DEPTH + GRAIN_RADIUS * 1.2, HourglassShape.HEIGHT - HourglassShape.CAP_DEPTH - GRAIN_RADIUS * 1.2)
 		var room := HourglassShape.half_width(clamped) - GRAIN_RADIUS * 1.3
 		var x := -room
 		while x <= room and spots.size() < count:
@@ -223,25 +232,33 @@ func _add_grain(spot: Vector2) -> void:
 	collision.shape = circle
 	grain.add_child(collision)
 	add_child(grain)
+	_set_frozen(grain)
 	grains.append(grain)
+
+
+func _set_frozen(grain: RigidBody2D) -> void:
+	grain.freeze_mode = RigidBody2D.FREEZE_MODE_STATIC
+	grain.freeze = frozen
+	if frozen:
+		grain.linear_velocity = Vector2.ZERO
+		grain.angular_velocity = 0.0
 
 
 func _rebuild_sides() -> void:
 	_sides.resize(grains.size())
 	_sides.fill(0)
-	_last_velocities.resize(grains.size())
-	_last_velocities.fill(Vector2.ZERO)
 	_update_sides()
 
 
 func _physics_process(delta: float) -> void:
-	_listen_for_taps(delta)
+	_update_pour_sound(delta)
+	if frozen:
+		return
+	# The glass is flat on the screen: only gravity along the screen moves the sand.
+	# Held flat there is none, and the sand rests wherever it lies.
 	var along := clampf(gravity_strength, 0.0, 1.0)
-	# What gravity does not pull along the screen pulls into it: the glass lies on
-	# its side, and the sand settles in the curve of the glass.
-	var into := sqrt(maxf(1.0 - along * along, 0.0))
 	var pull := gravity_direction * along * GRAVITY
-	var state := Vector3(gravity_direction.x * along, gravity_direction.y * along, into)
+	var state := Vector3(gravity_direction.x * along, gravity_direction.y * along, 0.0)
 	if state.distance_to(_last_state) > 0.04:
 		_last_state = state
 		_wake_everything()
@@ -253,9 +270,6 @@ func _physics_process(delta: float) -> void:
 		var force := pull
 		if sweeping and (_sides[i] < 0) == upper_side:
 			force += (Vector2(0.0, HourglassShape.NECK_Y) - grain.position).normalized() * TAIL_PULL * GRAVITY
-		if into > 0.02:
-			force += depth_pull(grain.position) * into * GRAVITY
-			force -= grain.linear_velocity * LYING_DAMPING * into
 		grain.apply_central_force(force * grain.mass)
 		if keep_awake:
 			grain.sleeping = false
@@ -264,49 +278,34 @@ func _physics_process(delta: float) -> void:
 	_meter_the_flow(crossed)
 
 
-## Which way, and how hard, the curve of the glass pulls a grain when the glass
-## lies on its side. The glass is round, so its floor is lowest along the middle
-## and lowest of all where it is widest. A grain slides down that floor: towards
-## the middle line, and towards the widest part of its bulb, away from the neck.
-## The result is a unit pull at most, in the same units as gravity.
-static func depth_pull(at: Vector2) -> Vector2:
-	var half := HourglassShape.half_width(at.y)
-	var slope := (HourglassShape.half_width(at.y + 2.0) - HourglassShape.half_width(at.y - 2.0)) / 4.0
-	var floor_height := sqrt(maxf(half * half - at.x * at.x, 0.0) + SOFT_FLOOR * SOFT_FLOOR)
-	var pull := Vector2(-at.x / floor_height, half * slope / floor_height)
-	return pull.limit_length(1.0)
+## How much the sand is moving about, from nothing (it lies still) to one (a good
+## part of it is on the move), whatever is moving it: pouring, tilting, sloshing.
+func _stirring() -> float:
+	if grains.is_empty():
+		return 0.0
+	var moving := 0
+	for grain in grains:
+		if grain.linear_velocity.length_squared() > MOVING_SPEED * MOVING_SPEED:
+			moving += 1
+	return clampf((float(moving) / grains.size() - MOVING_SHARE_QUIET) / (MOVING_SHARE_FULL - MOVING_SHARE_QUIET), 0.0, 1.0)
 
 
-## Finds the grains that have just knocked into something. A grain in free fall
-## speeds up by a known amount each step; a bigger change than that, in any
-## direction, is a knock. The harder the knock, the louder the tap.
-func _listen_for_taps(delta: float) -> void:
-	var expected := gravity_direction * gravity_strength * GRAVITY * delta
-	var heard := 0
-	var now := Time.get_ticks_msec()
-	for i in grains.size():
-		var velocity := grains[i].linear_velocity
-		var change := (velocity - _last_velocities[i] - expected).length()
-		_last_velocities[i] = velocity
-		if change < TAP_MIN_CHANGE or heard >= TAPS_PER_FRAME or now - _last_tap_ms < TAP_GAP_MS:
-			continue
-		heard += 1
-		_last_tap_ms = now
-		var position := grains[i].position
-		var on_glass := absf(position.x) > HourglassShape.half_width(position.y) - GRAIN_RADIUS * 1.7
-		grain_tapped.emit(clampf(change / TAP_HARD, 0.0, 1.0), on_glass)
-
-
-## One light tap: a glass tink if the grain hit the glass, a dull pat if it hit sand.
-func _play_tap(strength: float, on_glass: bool) -> void:
-	if not AppSettings.sand_sound or muted:
+## Fades the shh up while sand is pouring or moving and away when it stops.
+func _update_pour_sound(delta: float) -> void:
+	var pouring := not frozen and not muted and AppSettings.sand_sound \
+			and Time.get_ticks_msec() - _last_pour_ms < POUR_HOLD_MS
+	var ending := clampf(remaining_ms() / POUR_FADE_MS, 0.0, 1.0)
+	var wanted := ending if pouring else 0.0
+	if not frozen and not muted and AppSettings.sand_sound:
+		wanted = maxf(wanted, _stirring())
+	_pour_level = move_toward(_pour_level, wanted, (POUR_ATTACK if wanted > _pour_level else POUR_RELEASE) * delta)
+	if _pour_level <= 0.001:
+		if _pour.playing:
+			_pour.stop()
 		return
-	var voice := _voices[_next_voice]
-	_next_voice = (_next_voice + 1) % _voices.size()
-	voice.stream = SoundBank.grain_tap(on_glass, randi() % TAP_VARIANTS)
-	voice.volume_db = lerpf(TAP_QUIET_DB, TAP_LOUD_DB, pow(strength, 0.7)) + randf_range(-2.5, 1.5)
-	voice.pitch_scale = randf_range(0.88, 1.18)
-	voice.play()
+	if not _pour.playing:
+		_pour.play()
+	_pour.volume_db = lerpf(POUR_QUIET_DB, POUR_DB, _pour_level)
 
 
 ## Works out which side of the neck every grain is on. Returns how many crossed.
@@ -334,6 +333,9 @@ func _meter_the_flow(crossed: int) -> void:
 		_close_gate()
 		_was_flowing = false
 		return
+	if crossed > 0:
+		_sand_has_passed = true
+		_last_pour_ms = now
 	if not _was_flowing:
 		# Running starts with a grain ready to go, as when a glass is turned over.
 		_was_flowing = true
@@ -354,8 +356,11 @@ func _meter_the_flow(crossed: int) -> void:
 	else:
 		_close_gate()
 		_last_crossing_ms = now
-	if _upstream == 0 and not _drained_reported:
+	# An empty side only counts as finished if sand ran out of it, so tilting a glass
+	# whose upper side is already empty does not chime.
+	if _upstream == 0 and _sand_has_passed and not _drained_reported:
 		_drained_reported = true
+		_sand_has_passed = false
 		drained.emit()
 
 
@@ -386,7 +391,7 @@ func _return_escapees() -> void:
 		var y := grain.position.y
 		var limit := HourglassShape.half_width(y) - GRAIN_RADIUS
 		if absf(grain.position.x) > limit + GRAIN_RADIUS * 1.5 or y < 0.0 or y > HourglassShape.HEIGHT:
-			var inside := Vector2(clampf(grain.position.x, -limit, limit), clampf(y, GRAIN_RADIUS, HourglassShape.HEIGHT - GRAIN_RADIUS))
+			var inside := Vector2(clampf(grain.position.x, -limit, limit), clampf(y, HourglassShape.CAP_DEPTH + GRAIN_RADIUS, HourglassShape.HEIGHT - HourglassShape.CAP_DEPTH - GRAIN_RADIUS))
 			PhysicsServer2D.body_set_state(grain.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, Transform2D(0.0, to_global(inside)))
 			grain.linear_velocity = Vector2.ZERO
 
@@ -394,15 +399,11 @@ func _return_escapees() -> void:
 ## The back of the glass, the sand in the middle of it, and the front of the glass
 ## and the frame on top, so the sand sits inside the glass.
 func _build_art() -> void:
-	var back := ArtLayer.new()
-	back.draw_function = HourglassArt.draw_back
-	add_child(back)
 	var mass := SandMass.new()
 	add_child(mass)
 	mass.setup(grains, VIEW_SIZE, sand_color)
-	add_child(GlassPane.new())
 	var front := ArtLayer.new()
-	front.draw_function = HourglassArt.draw_front
+	front.draw_function = HourglassArt.draw_front.bind(cap_color)
 	add_child(front)
 
 
@@ -421,8 +422,10 @@ func _build_walls() -> void:
 			var outward := Vector2(sign * WALL_THICKNESS, 0.0)
 			_add_polygon(body, [a, b, b + outward, a + outward])
 	var top := HourglassShape.half_width(0.0) + WALL_THICKNESS
-	_add_polygon(body, [Vector2(-top, -WALL_THICKNESS), Vector2(top, -WALL_THICKNESS), Vector2(top, 0), Vector2(-top, 0)])
-	_add_polygon(body, [Vector2(-top, HourglassShape.HEIGHT), Vector2(top, HourglassShape.HEIGHT), Vector2(top, HourglassShape.HEIGHT + WALL_THICKNESS), Vector2(-top, HourglassShape.HEIGHT + WALL_THICKNESS)])
+	var lid := HourglassShape.CAP_DEPTH
+	_add_polygon(body, [Vector2(-top, lid - WALL_THICKNESS), Vector2(top, lid - WALL_THICKNESS), Vector2(top, lid), Vector2(-top, lid)])
+	var floor_y := HourglassShape.HEIGHT - lid
+	_add_polygon(body, [Vector2(-top, floor_y), Vector2(top, floor_y), Vector2(top, floor_y + WALL_THICKNESS), Vector2(-top, floor_y + WALL_THICKNESS)])
 
 
 func _add_polygon(body: StaticBody2D, points: Array) -> void:

@@ -236,3 +236,18 @@ func test_the_chime_is_soft_and_fades_to_nothing() -> void:
 			last_second = maxf(last_second, value)
 	assert_lt(peak, 0.6, "gentle, never harsh")
 	assert_lt(last_second, 0.01, "faded away by the end")
+
+
+func test_the_two_player_timer_is_a_chess_clock_with_a_lamp_for_whoever_is_playing() -> void:
+	var preset := Preset.new()
+	preset.type = Preset.Type.TIMER_2P
+	var tool := TwoPlayerTimerTool.new()
+	tool.preset = preset
+	tool.store = PresetStore.new()
+	add_child_autofree(tool)
+	await wait_frames(2)
+	assert_eq(tool._halves.size(), 2)
+	assert_true(tool._halves[1].upside_down, "the far side is turned round")
+	assert_false(tool._halves[0].upside_down)
+	for side in tool._halves:
+		assert_true(side is ClockSide)
