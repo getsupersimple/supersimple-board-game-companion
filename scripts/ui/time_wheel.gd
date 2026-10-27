@@ -96,7 +96,7 @@ func _draw() -> void:
 	band.bg_color = Color(0, 0, 0, 0.08)
 	band.set_corner_radius_all(28)
 	draw_style_box(band, Rect2(0.0, middle - ROW_HEIGHT / 2.0, size.x, ROW_HEIGHT))
-	var ink := Color("#E5484D") if alert else (Color("#1F8A70") if counting else Color("#1C1C1E"))
+	var ink := Color("#E5484D") if alert else (Color("#1F8A70") if counting else UiStyle.INK)
 	for offset in range(-1, 2):
 		var shown := seconds + offset * SLOW_STEP
 		if shown < 0 or shown > MAX_SECONDS:
@@ -104,7 +104,7 @@ func _draw() -> void:
 		var text := TimeFormat.format(shown * 1000, false)
 		var big := offset == 0
 		var font_size := FONT_SIZE if big else SIDE_FONT_SIZE
-		var colour := ink if big else Color("#1C1C1E")
+		var colour := ink if big else UiStyle.INK
 		if not big:
 			colour.a = 0.3
 		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size).x

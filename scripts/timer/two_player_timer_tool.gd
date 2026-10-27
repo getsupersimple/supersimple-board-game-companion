@@ -75,17 +75,9 @@ func _update_text(now: int) -> void:
 
 
 func _make_pause_button() -> Button:
-	var button := Button.new()
-	button.icon = IconLibrary.get_icon("pause")
-	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	button.custom_minimum_size = Vector2(150, 150)
+	var button := UiStyle.icon_button(Button.new(), "pause", 150, 72)
 	button.focus_mode = Control.FOCUS_NONE
 	button.accessibility_name = "Pause"
-	button.add_theme_constant_override("icon_max_width", 72)
-	for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		button.add_theme_color_override(state, Color("#1C1C1E"))
 	button.pressed.connect(func() -> void:
 		_game.toggle_pause(Time.get_ticks_msec())
 		_refresh_state())

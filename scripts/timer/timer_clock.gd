@@ -32,10 +32,6 @@ func reset() -> void:
 	_running_since = -1
 
 
-func is_running() -> bool:
-	return _running_since >= 0
-
-
 func elapsed_ms(now_ms: int) -> int:
 	return _banked_ms + (now_ms - _running_since if _running_since >= 0 else 0)
 

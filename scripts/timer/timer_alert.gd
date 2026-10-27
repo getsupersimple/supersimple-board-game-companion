@@ -6,11 +6,7 @@ static func sound_the_alarm(host: Node) -> void:
 	vibrate(600)
 	if not AppSettings.timer_buzzer:
 		return
-	var player := AudioStreamPlayer.new()
-	player.stream = SoundBank.stream("alarm")
-	host.add_child(player)
-	player.finished.connect(player.queue_free)
-	player.play()
+	SoundBank.play_once(host, "alarm")
 
 
 ## The gentle way to say time is up, for the hourglass: a soft wind chime, and two
@@ -21,11 +17,7 @@ static func chime(host: Node) -> void:
 		host.get_tree().create_timer(0.18).timeout.connect(func() -> void: Input.vibrate_handheld(25, 0.3))
 	if not AppSettings.timer_buzzer:
 		return
-	var player := AudioStreamPlayer.new()
-	player.stream = SoundBank.stream("chime")
-	host.add_child(player)
-	player.finished.connect(player.queue_free)
-	player.play()
+	SoundBank.play_once(host, "chime")
 
 
 static func vibrate(milliseconds: int) -> void:

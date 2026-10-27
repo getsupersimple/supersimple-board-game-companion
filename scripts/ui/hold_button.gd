@@ -38,4 +38,4 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if _holding and _held_for > 0.0:
 		var centre := size / 2.0
-		draw_arc(centre, minf(size.x, size.y) / 2.0 - 6.0, -PI / 2.0, -PI / 2.0 + TAU * _held_for / HOLD_SECONDS, 48, Color("#1C1C1E"), 8.0, true)
+		draw_arc(centre, minf(size.x, size.y) / 2.0 - 6.0, -PI / 2.0, -PI / 2.0 + TAU * _held_for / HOLD_SECONDS, 48, UiStyle.INK, 8.0, true)

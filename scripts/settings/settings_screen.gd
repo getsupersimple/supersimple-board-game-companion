@@ -6,7 +6,6 @@ extends Control
 signal back_pressed
 
 const ROW_HEIGHT := 200
-const INK := Color("#1C1C1E")
 
 var _toggles: Dictionary = {}
 var _credits: CreditsScreen
@@ -23,18 +22,7 @@ func _ready() -> void:
 	column.add_theme_constant_override("separation", 32)
 	margin.add_child(column)
 
-	var back := Button.new()
-	back.icon = IconLibrary.get_icon("arrow-left")
-	back.expand_icon = true
-	back.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	back.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	back.custom_minimum_size = Vector2(120, 120)
-	back.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	back.accessibility_name = tr("GAME_BACK")
-	for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		back.add_theme_color_override(state, INK)
-	back.pressed.connect(func() -> void: back_pressed.emit())
-	column.add_child(back)
+	column.add_child(UiStyle.back_button(func() -> void: back_pressed.emit()))
 
 	column.add_child(_make_row(["dices", "volume-2"], "dice_sound", "SETTINGS_DICE_SOUND"))
 	column.add_child(_make_row(["timer", "bell"], "timer_buzzer", "SETTINGS_TIMER_BUZZER"))
@@ -52,16 +40,13 @@ func _ready() -> void:
 func _make_credits_link() -> Control:
 	var link := Button.new()
 	link.text = tr("SETTINGS_CREDITS")
-	link.icon = IconLibrary.get_icon("heart")
-	link.expand_icon = true
+	UiStyle.icon_button(link, "heart", 0, 56)
+	link.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	link.flat = true
 	link.focus_mode = Control.FOCUS_NONE
 	link.custom_minimum_size = Vector2(0, 120)
 	link.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	link.add_theme_font_size_override("font_size", 44)
-	link.add_theme_constant_override("icon_max_width", 56)
-	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color", "icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
-		link.add_theme_color_override(state, INK)
 	link.pressed.connect(func() -> void: _credits.visible = true)
 	return link
 
@@ -69,9 +54,7 @@ func _make_credits_link() -> Control:
 func _make_row(icons: Array, setting: String, label_key: String) -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(0, ROW_HEIGHT)
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color("#EDEDF2")
-	box.set_corner_radius_all(40)
+	var box := UiStyle.box(UiStyle.PANEL, 40)
 	box.set_content_margin_all(32)
 	panel.add_theme_stylebox_override("panel", box)
 
@@ -81,7 +64,7 @@ func _make_row(icons: Array, setting: String, label_key: String) -> Control:
 	for icon_name in icons:
 		var picture := TextureRect.new()
 		picture.texture = IconLibrary.get_icon(icon_name)
-		picture.modulate = INK
+		picture.modulate = UiStyle.INK
 		picture.custom_minimum_size = Vector2(96, 96)
 		picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -93,14 +76,11 @@ func _make_row(icons: Array, setting: String, label_key: String) -> Control:
 
 	var toggle := Button.new()
 	toggle.toggle_mode = true
-	toggle.expand_icon = true
-	toggle.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	toggle.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	UiStyle.icon_button(toggle, "x", 0, 64)
 	toggle.custom_minimum_size = Vector2(220, 120)
 	toggle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	toggle.focus_mode = Control.FOCUS_NONE
 	toggle.accessibility_name = tr(label_key)
-	toggle.add_theme_constant_override("icon_max_width", 64)
 	toggle.set_pressed_no_signal(AppSettings.get_flag(setting))
 	toggle.toggled.connect(func(on: bool) -> void:
 		AppSettings.set_flag(setting, on)
@@ -117,11 +97,7 @@ func _make_row(icons: Array, setting: String, label_key: String) -> Control:
 ## On is a dark pill with a tick, off is a pale pill with a cross.
 func _style_toggle(toggle: Button, on: bool) -> void:
 	toggle.icon = IconLibrary.get_icon("check" if on else "x")
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = INK if on else Color("#D9D9DF")
-	fill.set_corner_radius_all(60)
+	var fill := UiStyle.box(UiStyle.INK if on else Color("#D9D9DF"), 60)
 	for state in ["normal", "hover", "pressed", "hover_pressed"]:
 		toggle.add_theme_stylebox_override(state, fill)
-	var ink := Color.WHITE if on else INK
-	for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
-		toggle.add_theme_color_override(state, ink)
+	UiStyle.tint_icon(toggle, Color.WHITE if on else UiStyle.INK)

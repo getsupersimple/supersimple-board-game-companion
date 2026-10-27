@@ -18,13 +18,8 @@ static func unlocked(host: Node) -> void:
 
 
 static func _play(host: Node, kind: String) -> void:
-	if not AppSettings.dice_sound or host == null or not host.is_inside_tree():
-		return
-	var player := AudioStreamPlayer.new()
-	player.stream = SoundBank.stream(kind)
-	host.add_child(player)
-	player.finished.connect(player.queue_free)
-	player.play()
+	if AppSettings.dice_sound:
+		SoundBank.play_once(host, kind)
 
 
 static func _pulse(host: Node, steps: Array) -> void:

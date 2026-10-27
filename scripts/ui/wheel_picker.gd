@@ -66,7 +66,7 @@ func _draw() -> void:
 		var shown := min_value + posmod(value - min_value + offset, span)
 		var y := middle + offset * ROW_HEIGHT + _drag_remainder
 		var fade := 1.0 - minf(absf(y - middle) / ROW_HEIGHT, 1.0) * 0.7
-		var colour := Color("#1C1C1E")
+		var colour := UiStyle.INK
 		colour.a = fade * (0.35 if dimmed else 1.0)
 		var text := "%02d" % shown
 		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, FONT_SIZE).x

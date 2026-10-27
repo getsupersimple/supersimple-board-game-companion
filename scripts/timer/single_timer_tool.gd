@@ -62,16 +62,8 @@ func _update_text(now: int) -> void:
 
 ## A reset button that has to be held, shared by both timers.
 static func make_reset_button(on_held: Callable) -> HoldButton:
-	var button := HoldButton.new()
-	button.icon = IconLibrary.get_icon("rotate-ccw")
-	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	button.custom_minimum_size = Vector2(150, 150)
+	var button := UiStyle.icon_button(HoldButton.new(), "rotate-ccw", 150, 72) as HoldButton
 	button.accessibility_name = "Reset"
-	button.add_theme_constant_override("icon_max_width", 72)
-	for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		button.add_theme_color_override(state, Color("#1C1C1E"))
 	button.held.connect(on_held)
 	return button
 

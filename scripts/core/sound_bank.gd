@@ -12,6 +12,17 @@ const BUZZER_ICONS := {"buzz": "circle-x", "ding": "bell", "horn": "megaphone", 
 static var _cache := {}
 
 
+## Plays a sound once from a throwaway player that tidies itself up.
+static func play_once(host: Node, kind: String) -> void:
+	if host == null or not host.is_inside_tree():
+		return
+	var player := AudioStreamPlayer.new()
+	player.stream = stream(kind)
+	host.add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+
+
 static func stream(kind: String) -> AudioStreamWAV:
 	if not _cache.has(kind):
 		_cache[kind] = _build(kind)
@@ -124,7 +135,7 @@ static func _build(kind: String) -> AudioStreamWAV:
 		"unchain":
 			# The door unlatching: the bolt drawn back, then the latch letting go.
 			return _render(0.45, func(t: float) -> float:
-				var scrape := _noise(t) * _bump(t, 0.0, 0.07, 0.045) * 0.20
+				var scrape := _noise(t) * _bump(t, 0.0, 0.07) * 0.20
 				var draw := _mode(t, 0.07, 150.0, 30.0, 0.30) + _mode(t, 0.07, 740.0, 45.0, 0.20)
 				var click := _latch(t, 0.13, 0.7)
 				return tanh((scrape + draw + click) * 0.9))
@@ -225,7 +236,7 @@ static func _mode(t: float, start: float, hz: float, decay: float, volume: float
 
 
 ## A smooth bump that rises and falls between two times, for shaping noise.
-static func _bump(t: float, from: float, to: float, _soft: float) -> float:
+static func _bump(t: float, from: float, to: float) -> float:
 	if t < from or t > to:
 		return 0.0
 	return sin(PI * (t - from) / (to - from))
@@ -234,15 +245,6 @@ static func _bump(t: float, from: float, to: float, _soft: float) -> float:
 ## Noise without a random number generator, so the sound is the same every time.
 static func _noise(t: float) -> float:
 	return sin(t * 91137.0) * sin(t * 40213.0)
-
-
-## One hit on metal, starting at `start`: a bright ring with overtones that dies away.
-static func _clink(t: float, start: float, hz: float, decay: float, volume: float) -> float:
-	if t < start:
-		return 0.0
-	var since := t - start
-	var ring := sin(TAU * hz * since) + 0.5 * sin(TAU * hz * 2.76 * since) + 0.25 * sin(TAU * hz * 5.4 * since)
-	return ring * exp(-decay * since) * volume
 
 
 static func _square(hz: float, t: float) -> float:

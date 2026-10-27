@@ -106,15 +106,9 @@ func _build_tray() -> HBoxContainer:
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(_on_add_die.bind(sides))
 		tray.add_child(button)
-	var roll := Button.new()
-	roll.icon = IconLibrary.get_icon("dices")
-	roll.expand_icon = true
-	roll.custom_minimum_size = Vector2(TRAY_BUTTON_SIZE, TRAY_BUTTON_SIZE)
+	var roll := UiStyle.icon_button(Button.new(), "dices", TRAY_BUTTON_SIZE, 64)
 	roll.focus_mode = Control.FOCUS_NONE
 	roll.accessibility_name = tr("DICE_ROLL")
-	roll.add_theme_constant_override("icon_max_width", 64)
-	for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		roll.add_theme_color_override(color_name, Color("#1C1C1E"))
 	roll.pressed.connect(_table.roll_all)
 	tray.add_child(roll)
 	return tray

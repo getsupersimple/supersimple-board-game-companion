@@ -67,26 +67,8 @@ func _make_wheel(top: int) -> WheelPicker:
 
 
 func _make_toggle(icon_name: String, label_key: String) -> Button:
-	var button := Button.new()
-	button.toggle_mode = true
-	button.icon = IconLibrary.get_icon(icon_name)
-	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	button.custom_minimum_size = Vector2(TOGGLE_SIZE, TOGGLE_SIZE)
-	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	button.focus_mode = Control.FOCUS_NONE
+	var button := UiStyle.dark_toggle(Button.new(), TOGGLE_SIZE, icon_name)
 	button.accessibility_name = tr(label_key)
-	button.add_theme_constant_override("icon_max_width", 72)
-	for state in ["icon_normal_color", "icon_hover_color", "icon_focus_color"]:
-		button.add_theme_color_override(state, Color("#1C1C1E"))
-	button.add_theme_color_override("icon_pressed_color", Color.WHITE)
-	button.add_theme_color_override("icon_hover_pressed_color", Color.WHITE)
-	var on_box := StyleBoxFlat.new()
-	on_box.bg_color = Color("#1C1C1E")
-	on_box.set_corner_radius_all(32)
-	button.add_theme_stylebox_override("pressed", on_box)
-	button.add_theme_stylebox_override("hover_pressed", on_box)
 	return button
 
 

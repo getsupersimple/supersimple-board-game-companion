@@ -50,26 +50,9 @@ func _ready() -> void:
 
 
 func _make_choice(kind: String, group: ButtonGroup) -> Button:
-	var button := Button.new()
-	button.toggle_mode = true
+	var button := UiStyle.dark_toggle(Button.new(), 150, SoundBank.BUZZER_ICONS[kind])
 	button.button_group = group
-	button.icon = IconLibrary.get_icon(SoundBank.BUZZER_ICONS[kind])
-	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	button.custom_minimum_size = Vector2(150, 150)
-	button.focus_mode = Control.FOCUS_NONE
 	button.accessibility_name = tr("BUZZER_" + kind.to_upper())
-	button.add_theme_constant_override("icon_max_width", 72)
-	for state in ["icon_normal_color", "icon_hover_color", "icon_focus_color"]:
-		button.add_theme_color_override(state, Color("#1C1C1E"))
-	for state in ["icon_pressed_color", "icon_hover_pressed_color"]:
-		button.add_theme_color_override(state, Color.WHITE)
-	var on_box := StyleBoxFlat.new()
-	on_box.bg_color = Color("#1C1C1E")
-	on_box.set_corner_radius_all(32)
-	button.add_theme_stylebox_override("pressed", on_box)
-	button.add_theme_stylebox_override("hover_pressed", on_box)
 	button.pressed.connect(func() -> void: _choose(kind))
 	return button
 

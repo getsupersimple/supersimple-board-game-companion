@@ -21,8 +21,7 @@ func _ready() -> void:
 	_settings_button.accessibility_name = tr("HOME_SETTINGS")
 	_settings_button.pressed.connect(func() -> void: settings_pressed.emit())
 	_grid.columns = COLUMNS
-	for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		_settings_button.add_theme_color_override(color_name, Color("#1C1C1E"))
+	UiStyle.tint_icon(_settings_button, UiStyle.INK)
 	resized.connect(_update_tile_sizes)
 
 
@@ -37,15 +36,15 @@ func show_games(game_store: PresetStore) -> void:
 
 
 func _add_game_tile(game: Game) -> void:
-	var tile := _make_tile()
+	var tile := GameTile.new()
 	tile.setup(game.icon, game.color, "HOME_QUICK_GAME" if game.id == PresetStore.QUICK_ID else "HOME_GAME")
 	tile.pressed.connect(func() -> void: game_selected.emit(game.id))
 	_grid.add_child(tile)
 
 
 func _add_new_game_tile() -> void:
-	var tile := _make_tile()
-	tile.setup("plus", Color("#EDEDF2"), "HOME_ADD_GAME")
+	var tile := GameTile.new()
+	tile.setup("plus", UiStyle.PANEL, "HOME_ADD_GAME")
 	tile.pressed.connect(_on_add_game_pressed)
 	_grid.add_child(tile)
 
@@ -57,10 +56,6 @@ func _on_add_game_pressed() -> void:
 	var tile_color := NEW_GAME_COLORS[index % NEW_GAME_COLORS.size()]
 	store.add_game(Game.create(icon_name, tile_color))
 	show_games(store)
-
-
-func _make_tile() -> GameTile:
-	return GameTile.new()
 
 
 ## Keeps tiles square: a scroll container gives its children no height to

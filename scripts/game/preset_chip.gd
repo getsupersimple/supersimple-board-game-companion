@@ -26,17 +26,8 @@ var _delete_button: Button
 func setup(chip_preset: Preset, chip_index: int, selected: bool) -> void:
 	preset = chip_preset
 	index = chip_index
-	custom_minimum_size = Vector2(CHIP_SIZE, CHIP_SIZE)
-	icon = IconLibrary.get_icon(preset.icon)
-	expand_icon = true
-	icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	add_theme_constant_override("icon_max_width", 72)
+	UiStyle.icon_button(self, preset.icon, CHIP_SIZE, 72, ColorUtils.contrast_color(preset.color))
 	accessibility_name = _accessibility_label()
-
-	var icon_color := ColorUtils.contrast_color(preset.color)
-	for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		add_theme_color_override(color_name, icon_color)
 	add_theme_stylebox_override("normal", _box(preset.color, selected))
 	add_theme_stylebox_override("hover", _box(preset.color, selected))
 	add_theme_stylebox_override("pressed", _box(preset.color.darkened(0.15), selected))
@@ -71,21 +62,12 @@ func set_editing(editing: bool) -> void:
 
 
 func _add_delete_button() -> void:
-	_delete_button = Button.new()
-	_delete_button.icon = IconLibrary.get_icon("x")
-	_delete_button.expand_icon = true
-	_delete_button.custom_minimum_size = Vector2(52, 52)
+	_delete_button = UiStyle.icon_button(Button.new(), "x", 52, 28, Color.WHITE)
 	_delete_button.size = Vector2(52, 52)
-	_delete_button.position = Vector2(0, 0)
 	_delete_button.accessibility_name = tr("TOOLBAR_DELETE")
-	_delete_button.add_theme_constant_override("icon_max_width", 28)
-	var circle := StyleBoxFlat.new()
-	circle.bg_color = Color("#1C1C1E")
-	circle.set_corner_radius_all(26)
+	var circle := UiStyle.box(UiStyle.INK, 26)
 	for state in ["normal", "hover", "pressed"]:
 		_delete_button.add_theme_stylebox_override(state, circle)
-	for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color"]:
-		_delete_button.add_theme_color_override(color_name, Color.WHITE)
 	_delete_button.pressed.connect(func() -> void: delete_requested.emit(preset.id))
 	add_child(_delete_button)
 
@@ -148,10 +130,8 @@ func _accessibility_label() -> String:
 
 
 func _box(fill: Color, selected: bool) -> StyleBoxFlat:
-	var box := StyleBoxFlat.new()
-	box.bg_color = fill
-	box.set_corner_radius_all(32)
+	var box := UiStyle.box(fill, 32)
 	if selected:
 		box.set_border_width_all(6)
-		box.border_color = Color("#1C1C1E")
+		box.border_color = UiStyle.INK
 	return box

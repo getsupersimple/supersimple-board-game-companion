@@ -32,8 +32,7 @@ func _ready() -> void:
 	_done_button.accessibility_name = tr("TOOLBAR_DONE")
 	_done_button.pressed.connect(func() -> void: _set_editing(false))
 	for button in [_back_button, _done_button]:
-		for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-			button.add_theme_color_override(color_name, Color("#1C1C1E"))
+		UiStyle.tint_icon(button, UiStyle.INK)
 	_build_picker()
 	_tool_host = Control.new()
 	_tool_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -138,39 +137,21 @@ func _set_toolbar_visible(toolbar_visible: bool) -> void:
 
 
 func _make_add_chip() -> Button:
-	var chip := Button.new()
-	chip.custom_minimum_size = Vector2(PresetChip.CHIP_SIZE, PresetChip.CHIP_SIZE)
-	chip.icon = IconLibrary.get_icon("plus")
-	chip.expand_icon = true
-	chip.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	chip.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	chip.add_theme_constant_override("icon_max_width", 72)
+	var chip := UiStyle.icon_button(Button.new(), "plus", PresetChip.CHIP_SIZE, 72)
 	chip.accessibility_name = tr("TOOLBAR_ADD")
 	chip.focus_mode = Control.FOCUS_NONE
-	for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		chip.add_theme_color_override(color_name, Color("#1C1C1E"))
 	chip.pressed.connect(func() -> void: _picker.visible = not _picker.visible)
 	return chip
 
 
 func _build_picker() -> void:
 	for preset_type in PICKER_TYPES:
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(PresetChip.CHIP_SIZE, PresetChip.CHIP_SIZE)
-		button.icon = IconLibrary.get_icon(Preset.default_icon(preset_type))
-		button.expand_icon = true
-		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-		button.add_theme_constant_override("icon_max_width", 72)
-		button.focus_mode = Control.FOCUS_NONE
 		var color := Preset.default_color(preset_type)
-		var box := StyleBoxFlat.new()
-		box.bg_color = color
-		box.set_corner_radius_all(32)
+		var button := UiStyle.icon_button(Button.new(), Preset.default_icon(preset_type), PresetChip.CHIP_SIZE, 72, ColorUtils.contrast_color(color))
+		button.focus_mode = Control.FOCUS_NONE
+		var box := UiStyle.box(color, 32)
 		for state in ["normal", "hover", "pressed"]:
 			button.add_theme_stylebox_override(state, box)
-		for color_name in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-			button.add_theme_color_override(color_name, ColorUtils.contrast_color(color))
 		button.pressed.connect(_on_type_picked.bind(preset_type))
 		_picker.add_child(button)
 
