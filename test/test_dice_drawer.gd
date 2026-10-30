@@ -12,6 +12,11 @@ func _tool(dice: Array = []) -> DiceTool:
 	return tool
 
 
+## The row of a kind of die, which sits where DiceTool.DIE_KINDS puts it.
+func _row_of(sides: int) -> int:
+	return DiceTool.DIE_KINDS.find(sides)
+
+
 func _row_centre(drawer: DiceDrawer, row: int) -> Vector2:
 	return drawer.column_rect().position + Vector2(DiceDrawer.COLUMN_WIDTH / 2.0, (row + 0.5) * DiceDrawer.ROW_HEIGHT)
 
@@ -49,7 +54,8 @@ func test_the_drawer_hangs_under_the_plus_with_a_real_die_for_each_kind() -> voi
 	drawer.open(tool._plus, false)
 	var column := drawer.column_rect()
 	assert_gt(column.position.y, tool._plus.get_global_rect().end.y, "below the button")
-	assert_almost_eq(column.end.x, tool._plus.get_global_rect().end.x, 0.5, "lined up with its right edge")
+	assert_lte(column.end.x + DiceDrawer.PADDING, tool._plus.get_global_rect().end.x, "inside its right edge")
+	assert_gt(column.end.x, tool._plus.get_global_rect().end.x - 500.0, "hanging under the button")
 	assert_eq(DiceDrawer.die_name(6), "D6")
 	assert_eq(DiceDrawer.die_name(100), "D100")
 	assert_true(Rect2(Vector2.ZERO, tool.size).encloses(column), "all of it on screen")
@@ -62,8 +68,8 @@ func test_dragging_onto_a_die_and_letting_go_adds_it_in_a_random_colour() -> voi
 	var picked := []
 	drawer.picked.connect(func(sides: int, color: Variant) -> void: picked.append([sides, color]))
 	drawer.open(tool._plus, true)
-	drawer.pointer_move(_row_centre(drawer, 2))
-	drawer.pointer_up(_row_centre(drawer, 2))
+	drawer.pointer_move(_row_centre(drawer, _row_of(6)))
+	drawer.pointer_up(_row_centre(drawer, _row_of(6)))
 	assert_eq(picked, [[6, null]])
 	assert_false(drawer.is_open, "the drawer puts itself away")
 
@@ -75,15 +81,15 @@ func test_keeping_the_finger_on_a_die_pulls_out_the_colours_to_pick_from() -> vo
 	var picked := []
 	drawer.picked.connect(func(sides: int, color: Variant) -> void: picked.append([sides, color]))
 	drawer.open(tool._plus, true)
-	drawer.pointer_move(_row_centre(drawer, 6))
+	drawer.pointer_move(_row_centre(drawer, _row_of(20)))
 	assert_false(drawer.colors_are_out(), "not at once")
 	drawer._process(DiceDrawer.DWELL_SECONDS + 0.1)
 	assert_true(drawer.colors_are_out())
 	await wait_seconds(DiceDrawer.SLIDE_SECONDS + 0.1)
-	var strip := drawer.strip_rect(6)
+	var strip := drawer.strip_rect(_row_of(20))
 	assert_lt(strip.end.x, drawer.column_rect().position.x, "out to the side of the die")
-	assert_almost_eq(strip.position.y, drawer.column_rect().position.y + 6 * DiceDrawer.ROW_HEIGHT, 0.5, "level with it")
-	var swatch := drawer.swatch_rect(6, 4).get_center()
+	assert_almost_eq(strip.position.y, drawer.column_rect().position.y + _row_of(20) * DiceDrawer.ROW_HEIGHT, 0.5, "level with it")
+	var swatch := drawer.swatch_rect(_row_of(20), 4).get_center()
 	drawer.pointer_move(swatch)
 	drawer.pointer_up(swatch)
 	assert_eq(picked, [[20, DiceTool.PALETTE[4]]])
@@ -122,7 +128,7 @@ func test_tapping_the_plus_opens_the_drawer_and_a_tap_on_a_die_adds_it() -> void
 	var drawer: DiceDrawer = tool._drawer
 	assert_true(drawer.is_open)
 	var before := tool._table.dice.size()
-	var spot := _row_centre(drawer, 1)
+	var spot := _row_centre(drawer, _row_of(4))
 	drawer.pointer_down(spot)
 	drawer.pointer_up(spot)
 	assert_eq(tool._table.dice.size(), before + 1)
@@ -130,7 +136,7 @@ func test_tapping_the_plus_opens_the_drawer_and_a_tap_on_a_die_adds_it() -> void
 	assert_true(DiceTool.PALETTE.has(tool._table.dice[before].die_color))
 	assert_eq(tool.preset.data["dice"].size(), 1, "and it is saved")
 	assert_true(drawer.is_open, "opened by a tap, it stays open for more dice")
-	var again := _row_centre(drawer, 2)
+	var again := _row_centre(drawer, _row_of(8))
 	drawer.pointer_down(again)
 	drawer.pointer_up(again)
 	assert_eq(tool._table.dice.size(), before + 2, "a second die without reopening it")
@@ -146,7 +152,7 @@ func test_holding_the_plus_opens_the_drawer_under_the_finger() -> void:
 	assert_false(tool._drawer.is_open)
 	await wait_seconds(DiceTool.LONG_PRESS_SECONDS + 0.2)
 	assert_true(tool._drawer.is_open)
-	var spot := tool._drawer.global_position + _row_centre(tool._drawer, 0) - tool._plus.global_position
+	var spot := tool._drawer.global_position + _row_centre(tool._drawer, _row_of(2)) - tool._plus.global_position
 	var move := InputEventMouseMotion.new()
 	move.position = spot
 	tool._plus.gui_input.emit(move)

@@ -55,6 +55,8 @@ func setup(types: Array[Preset.Type]) -> void:
 ## Springs the drawer up out of `anchor`, lined up with its left edge. `held` says a finger
 ## is already down, having come from a long press on the anchor.
 func open(anchor: Control, held: bool) -> void:
+	if held:
+		Haptics.pulse(20)
 	ActionBars.opening(self)
 	var rect := anchor.get_global_rect()
 	var height := _types.size() * BUTTON + (_types.size() - 1) * GAP + PADDING * 2.0

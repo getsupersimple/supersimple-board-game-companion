@@ -14,15 +14,28 @@ extends Control
 signal picked(sides: int, color: Variant)
 signal closed
 
-const COLUMN_WIDTH := 124.0
+const COLUMN_WIDTH := 280.0
 const ROW_HEIGHT := 124.0
-const SWATCH_SIZE := 72.0
-const SWATCH_GAP := 10.0
+## The title above the rows, and the space between one row's pill and the next.
+const HEADER_HEIGHT := 100.0
+const ROW_GAP := 14.0
+const PADDING := 20.0
+## How far in from the screen's edge the panel is kept.
+const EDGE_MARGIN := 24.0
+const ICON_SIZE := 68.0
+const TITLE_SIZE := 38
+const PANEL_FILL := Color("#FAFAFC")
+const ROW_FILL := Color("#F0F0F4")
+const ROW_SELECTED := Color("#E3EBFF")
+const SELECTED_INK := Color("#1D4ED8")
+const GREY_INK := Color("#6B6B78")
+const SWATCH_SIZE := 96.0
+const SWATCH_GAP := 14.0
 const GAP := 8.0
 ## A finger kept on a die this long pulls the colours out.
 const DWELL_SECONDS := 0.4
 ## Dice are this far apart in the picture, in table units, so a die has room to turn.
-const LABEL_SIZE := 40
+const LABEL_SIZE := 44
 const SLIDE_SECONDS := 0.18
 const SLIDE_DISTANCE := 60.0
 
@@ -31,6 +44,7 @@ var colors: Array[Color] = []
 var is_open := false
 
 var _anchor: Control
+var _icons := {}
 var _column_position := Vector2.ZERO
 var _row := -1
 var _swatch := -1
@@ -53,16 +67,22 @@ func _init() -> void:
 func setup(sides: Array[int], palette: Array[Color]) -> void:
 	sides_list = sides
 	colors = palette
+	# Loaded ahead of drawing: a texture loaded for the first time inside `_draw` comes out black.
+	for count in sides:
+		_icons[count] = IconLibrary.get_icon("die-%d" % count)
+
 
 
 ## Shows the drawer under `anchor`, lined up with its right edge. `held` says a finger
 ## is already down, having come from a long press on the anchor.
 func open(anchor: Control, held: bool) -> void:
+	if held:
+		Haptics.pulse(20)
 	ActionBars.opening(self)
 	_anchor = anchor
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var corner := anchor.global_position - global_position
-	var top_left := Vector2(corner.x + anchor.size.x - COLUMN_WIDTH, corner.y + anchor.size.y + GAP)
+	var top_left := Vector2(corner.x + anchor.size.x - COLUMN_WIDTH - PADDING - EDGE_MARGIN, corner.y + anchor.size.y + GAP + HEADER_HEIGHT)
 	_column_position = top_left
 	is_open = true
 	_down = held
@@ -238,23 +258,35 @@ func _draw() -> void:
 	if not is_open:
 		return
 	var column := column_rect()
-	UiStyle.box(UiStyle.PANEL, 28).draw(get_canvas_item(), column.grow(10.0))
-	if _row >= 0:
-		var highlight := UiStyle.box(Color(UiStyle.INK, 0.14), 20)
-		highlight.draw(get_canvas_item(), Rect2(column.position.x + 4.0, column.position.y + _row * ROW_HEIGHT + 4.0, COLUMN_WIDTH - 8.0, ROW_HEIGHT - 8.0))
+	var panel := UiStyle.box(PANEL_FILL, 56)
+	panel.shadow_color = Color(0, 0, 0, 0.14)
+	panel.shadow_size = 26
+	panel.draw(get_canvas_item(), Rect2(column.position - Vector2(PADDING, HEADER_HEIGHT), column.size + Vector2(PADDING * 2.0, HEADER_HEIGHT + PADDING)))
 	var font := ThemeDB.fallback_font
+	draw_string(font, Vector2(column.position.x + 12.0, column.position.y - HEADER_HEIGHT * 0.38), tr("DICE_ADD_TITLE"), HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, GREY_INK)
 	for i in sides_list.size():
-		var baseline := column.position.y + (i + 0.5) * ROW_HEIGHT + LABEL_SIZE * 0.35
-		draw_string(font, Vector2(column.position.x, baseline), die_name(sides_list[i]), HORIZONTAL_ALIGNMENT_CENTER, COLUMN_WIDTH, LABEL_SIZE, UiStyle.INK)
+		var chosen := i == _row
+		var rect := Rect2(column.position.x, column.position.y + i * ROW_HEIGHT + ROW_GAP / 2.0, COLUMN_WIDTH, ROW_HEIGHT - ROW_GAP)
+		UiStyle.box(ROW_SELECTED if chosen else ROW_FILL, 36).draw(get_canvas_item(), rect)
+		var ink := SELECTED_INK if chosen else UiStyle.INK
+		var middle := rect.position.y + rect.size.y / 2.0
+		var icon := Rect2(rect.position.x + 28.0, middle - ICON_SIZE / 2.0, ICON_SIZE, ICON_SIZE)
+		draw_texture_rect(_icons[sides_list[i]], icon, false, ink)
+		draw_string(font, Vector2(icon.end.x + 28.0, middle + LABEL_SIZE * 0.35), die_name(sides_list[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, ink)
 	if _colors_row < 0 or _slide <= 0.0:
 		return
 	var offset := Vector2((1.0 - _slide) * SLIDE_DISTANCE, 0.0)
 	var strip := strip_rect(_colors_row)
-	UiStyle.box(Color(UiStyle.PANEL, _slide), 28).draw(get_canvas_item(), Rect2(strip.position + offset, strip.size).grow_individual(0, -10, 0, -10))
+	var strip_box := UiStyle.box(Color(UiStyle.PANEL, _slide), 44)
+	strip_box.shadow_color = Color(0, 0, 0, 0.22 * _slide)
+	strip_box.shadow_size = 24
+	strip_box.draw(get_canvas_item(), Rect2(strip.position + offset, strip.size))
 	for i in colors.size():
 		var rect := swatch_rect(_colors_row, i)
 		rect.position += offset
-		var fill := UiStyle.box(Color(colors[i], _slide), 18)
+		if i == _swatch:
+			rect = rect.grow(6.0)
+		var fill := UiStyle.box(Color(colors[i], _slide), 24)
 		if i == _swatch:
 			fill.set_border_width_all(6)
 			fill.border_color = Color(Color.WHITE if colors[i].get_luminance() < 0.5 else UiStyle.INK, _slide)

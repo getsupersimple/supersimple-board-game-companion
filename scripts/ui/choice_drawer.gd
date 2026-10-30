@@ -89,6 +89,8 @@ func setup_colors(palette: Array[Color]) -> void:
 
 ## Opens the row around `point`. `held` says a finger is still down there.
 func open(point: Vector2, current: String, held: bool) -> void:
+	if held:
+		Haptics.pulse(20)
 	var panel := _panel_size()
 	var width := panel.x
 	var height := panel.y

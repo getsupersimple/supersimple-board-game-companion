@@ -134,6 +134,16 @@ func hold(on: bool) -> void:
 	sleeping = false
 
 
+## Holds the die rigidly where it lies, or lets it go again. A locked die stays frozen either way.
+func pin(on: bool) -> void:
+	if on:
+		linear_velocity = Vector3.ZERO
+		angular_velocity = Vector3.ZERO
+		freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	freeze = on or locked
+	sleeping = false
+
+
 ## Paints the die another colour, numerals and all.
 func set_color(color: Color) -> void:
 	die_color = color

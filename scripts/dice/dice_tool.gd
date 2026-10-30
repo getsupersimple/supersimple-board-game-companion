@@ -7,14 +7,14 @@ extends Control
 ## change.
 
 const MAX_DICE := 16
-const DIE_KINDS: Array[int] = [2, 4, 6, 8, 10, 12, 20, 100]
+const DIE_KINDS: Array[int] = [4, 6, 8, 10, 12, 20, 2, 100]
 const PERCENTILE := 100
 ## The colours of the standard theme; a dice tool offers its own theme's (see `_palette`).
 const PALETTE: Array[Color] = Themes.STANDARD_PALETTE
 ## Holding a die in the top row, or the + button, this long is a long press.
 const LONG_PRESS_SECONDS := 0.45
 const TOP_ICON_SIZE := 72
-const LOCK_CHOICES: Array[String] = ["auto", "unlock"]
+const LOCK_CHOICES: Array[String] = ["auto", "unlock", "clear"]
 const DIE_CHOICES: Array[String] = ["color", "lock", "remove"]
 const DIE_ICONS := {"lock": "lock", "unlock": "lock-open", "color": "palette", "remove": "trash-2"}
 ## A touch on the table shorter and shorter-moving than this is a tap.
@@ -24,6 +24,9 @@ const TAP_SLOP := 24.0
 ## Every colour's tally is at most this wide, so they line up whatever the number.
 const TOTAL_WIDTH := 170.0
 const SCORE_GAP := 8.0
+## After a long press has opened a die's menu, a finger that stays put this long, in seconds, makes
+## the die draggable instead.
+const DRAG_WAIT_SECONDS := 1.0
 ## A die has to lie still this long, in seconds, before its pill grows.
 const SCORE_SETTLE := 0.3
 ## A die that has started moving has to keep at it this long before its pill shrinks away.
@@ -55,6 +58,7 @@ var _only_color: Variant = null
 var _only_since := 0
 ## Counts presses that landed on a die and may become a long press, which picks the die up.
 var _die_press := 0
+var _drag_press := 0
 var _last_point := Vector2.ZERO
 ## Counts presses on the top row. Non-zero while a press may still become a tap or a
 ## long press; the first of release and timeout takes it.
@@ -138,6 +142,7 @@ func _on_table_input(event: InputEvent) -> void:
 		else:
 			_surface_press = 0
 			_die_press = 0
+			_drag_press = 0
 			_table.press_down(false)
 			_table.end_touch()
 			if _held_menu != null:
@@ -149,10 +154,10 @@ func _on_table_input(event: InputEvent) -> void:
 			if quick and event.position.distance_to(_tap_start) < TAP_SLOP:
 				_table.jump_all()
 	elif event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+		_last_point = event.position
 		if _held_menu != null:
 			_move_menu(event.position)
 		else:
-			_last_point = event.position
 			if event.position.distance_to(_tap_start) > TAP_SLOP:
 				_surface_press = 0
 				_die_press = 0
@@ -204,14 +209,31 @@ func _lock_by_default() -> void:
 		_on_die_choice("lock")
 
 
-## A finger has kept still on a die: the die is picked up, and follows the finger if it moves; if
-## it stays put a while longer the die's own menu opens.
+## A finger has kept still on a die: the die's own menu opens at once. If the finger then stays put
+## for DRAG_WAIT_SECONDS without going to a choice, the menu goes and the die can be dragged.
 func _on_die_long_press(press_id: int) -> void:
 	if _die_press != press_id:
 		return
 	_die_press = 0
-	if _table.begin_touch(_last_point):
-		Haptics.pulse(20)
+	var die := _table.die_at(_last_point)
+	if die == null:
+		return
+	Haptics.pulse(20)
+	_on_die_held(die, _last_point)
+	_drag_press += 1
+	get_tree().create_timer(DRAG_WAIT_SECONDS).timeout.connect(_on_die_drag_ready.bind(_drag_press))
+
+
+func _on_die_drag_ready(press_id: int) -> void:
+	if _drag_press != press_id or _held_menu != _die_drawer or _menu_die == null:
+		return
+	if _die_drawer.item_at(_to_menu(_die_drawer, _last_point)) >= 0 or _color_drawer.is_open:
+		return
+	var die := _menu_die
+	_held_menu = null
+	_die_drawer.close()
+	if _table.dice.has(die) and _table.begin_touch(_last_point, false):
+		Haptics.pulse(30)
 
 
 func _on_surface_held(press_id: int, point: Vector2) -> void:
@@ -317,6 +339,10 @@ func _on_lock_choice(kind: String) -> void:
 	if kind == "unlock":
 		_table.unlock_all()
 		return
+	if kind == "clear":
+		_table.remove_all()
+		_save()
+		return
 	_table.auto_lock = not _table.auto_lock
 	preset.data["auto_lock"] = _table.auto_lock
 	store.preset_changed()
@@ -366,7 +392,7 @@ func _build_plus_button() -> void:
 	_color_drawer.closed.connect(_on_colors_closed)
 	add_child(_color_drawer)
 	_lock_drawer = ChoiceDrawer.new()
-	_lock_drawer.setup(LOCK_CHOICES, {"auto": "lock", "unlock": "lock-open"}, {"auto": tr("DICE_AUTO_LOCK"), "unlock": tr("DICE_UNLOCK_ALL")})
+	_lock_drawer.setup(LOCK_CHOICES, {"auto": "lock", "unlock": "lock-open", "clear": "trash-2"}, {"auto": tr("DICE_AUTO_LOCK"), "unlock": tr("DICE_UNLOCK_ALL"), "clear": tr("DICE_REMOVE_ALL")})
 	_lock_drawer.close_on_release = true
 	_lock_drawer.picked.connect(_on_lock_choice)
 	add_child(_lock_drawer)
@@ -397,6 +423,7 @@ func accepts_swipe() -> bool:
 func cancel_press() -> void:
 	_surface_press = 0
 	_die_press = 0
+	_drag_press = 0
 
 
 ## Tapping the tool's icon in the toolbar while it is showing rolls the dice again.

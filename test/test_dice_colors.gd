@@ -387,8 +387,29 @@ func test_a_die_is_only_picked_up_by_a_long_press_and_a_finger_that_moves_first_
 	_finger_at_table(tool, false, at + Vector2(80, 0))
 	_finger_at_table(tool, true, at)
 	await wait_seconds(DiceTool.LONG_PRESS_SECONDS + 0.2)
-	assert_true(tool._table.is_dragging() or tool._die_drawer.is_open, "kept still, the die is picked up")
+	assert_true(tool._die_drawer.is_open, "the action bar opens at once")
+	assert_false(tool._table.is_dragging(), "but the die cannot be dragged yet")
+	await wait_seconds(DiceTool.DRAG_WAIT_SECONDS + 0.1)
+	assert_false(tool._die_drawer.is_open, "a second on, the bar goes")
+	assert_true(tool._table.is_dragging(), "and the die can be dragged")
+	var heading := InputEventMouseMotion.new()
+	heading.position = at + Vector2(200, 0)
+	heading.button_mask = MOUSE_BUTTON_MASK_LEFT
+	tool._on_table_input(heading)
+	_finger_at_table(tool, false, at + Vector2(200, 0))
+	assert_false(tool._table.is_dragging())
+
+
+func test_lifting_after_the_long_press_before_the_second_is_up_keeps_the_die_undraggable() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}])
+	await wait_seconds(3.0)
+	var at := tool._table.camera.unproject_position(tool._table.dice[0].global_position)
+	_finger_at_table(tool, true, at)
+	await wait_seconds(DiceTool.LONG_PRESS_SECONDS + 0.2)
+	assert_true(tool._die_drawer.is_open)
 	_finger_at_table(tool, false, at)
+	await wait_seconds(DiceTool.DRAG_WAIT_SECONDS + 0.2)
+	assert_false(tool._table.is_dragging(), "the late timer does nothing once the finger has lifted")
 
 
 func test_dice_saved_in_colours_from_before_palettes_become_the_nearest_of_the_palette() -> void:
@@ -398,3 +419,28 @@ func test_dice_saved_in_colours_from_before_palettes_become_the_nearest_of_the_p
 		assert_true(tool._palette.has(die.die_color), "a palette colour")
 	assert_eq(tool._table.dice[0].die_color, Themes.palette("standard")[0])
 	assert_eq(tool._table.dice[1].die_color, Themes.palette("standard")[2])
+
+
+func test_the_bare_table_menu_can_remove_every_die() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}, {"sides": 8, "color": DiceTool.PALETTE[1]}])
+	await wait_seconds(0.3)
+	assert_eq(tool._table.dice.size(), 2)
+	tool._on_lock_choice("clear")
+	await wait_frames(2)
+	assert_eq(tool._table.dice.size(), 0)
+	assert_eq(tool.preset.data["dice"].size(), 0, "kept with the preset")
+
+
+func test_settled_dice_are_held_in_place_for_two_seconds() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}])
+	var die: Die = null
+	var waited := 0.0
+	while waited < 6.0 and (die == null or not die.freeze):
+		await wait_seconds(0.25)
+		waited += 0.25
+		die = tool._table.dice[0]
+	assert_true(die.freeze, "held once it has landed")
+	await wait_seconds(DiceTable.PIN_SECONDS + 0.5)
+	assert_false(die.freeze, "let go after two seconds")
+	await wait_seconds(0.6)
+	assert_false(die.freeze, "and not held again while it stays still")

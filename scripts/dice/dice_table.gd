@@ -50,6 +50,10 @@ const SHAKE_COOLDOWN := 0.5
 const AUTO_LOCK_HOLD := 0.35
 ## After Unlock all, auto lock waits this long before it may lock anything again.
 const AUTO_LOCK_PAUSE := 1.0
+## Once every die has landed, they are held exactly where they lie for this long (seconds).
+const PIN_SECONDS := 2.0
+## After being let go, the dice have to move this long (seconds) before they are held again.
+const PIN_REARM_SECONDS := 0.4
 const CAMERA_HEIGHT := 20.0
 ## The camera looks straight down without perspective, so a die is drawn the same size and
 ## in the same place at any height, and the walls can stand right at the edge of the view.
@@ -91,12 +95,21 @@ var _grab_height := 0.0
 var _grab_travel := 0.0
 var _grab_time := 0.0
 var _grab_view := Vector2.ZERO
+## A die held still offers its menu, unless it was picked up by a long press that already did.
+var _grab_offers_menu := true
 var _voices: Array[AudioStreamPlayer] = []
 var _next_voice := 0
 var _last_haptic_ms := 0
 var _bounds: Node3D
 var _flat_time := {}
 var _auto_lock_pause := 0.0
+## Seconds left of holding the settled dice in place; zero when they are free.
+var _pin_left := 0.0
+var _pinned := false
+## The dice were held once since they last moved, so they are not held again until they do.
+var _pin_spent := false
+## How long some die has been moving, without a break.
+var _moving_time := 0.0
 ## A die that has just been unlocked waits this long (seconds, counting down) before auto lock takes it again.
 var _hold_off := {}
 
@@ -173,6 +186,7 @@ func _on_impact(strength: float) -> void:
 func press_down(on: bool) -> void:
 	_press_time = 0.0
 	_pressing = on
+	_unpin()
 	for die in dice:
 		# Letting go reaches locked dice too: one that auto lock froze during the press is
 		# still weighted and damped, and would stay stuck once unlocked.
@@ -181,6 +195,7 @@ func press_down(on: bool) -> void:
 
 
 func remove_die(die: Die) -> void:
+	_unpin()
 	for doomed in [die, die.partner]:
 		if doomed != null:
 			dice.erase(doomed)
@@ -189,8 +204,20 @@ func remove_die(die: Die) -> void:
 	_emit_results()
 
 
+## Takes every die off the table.
+func remove_all() -> void:
+	_unpin()
+	for die in dice:
+		die.queue_free()
+	dice.clear()
+	_hold_off.clear()
+	_rest.clear()
+	_emit_results()
+
+
 ## Throws every unlocked die again. Locked dice stay where they are.
 func roll_all() -> void:
+	_unpin()
 	for die in dice:
 		if die.locked:
 			continue
@@ -205,6 +232,7 @@ func roll_all() -> void:
 ## Throws every unlocked die the way a swipe went: `direction` is on the table's floor (x across,
 ## y down the screen), `speed` how hard.
 func throw_all(direction: Vector2, speed: float) -> void:
+	_unpin()
 	var heading := Vector3(direction.x, 0.0, direction.y).normalized()
 	for die in dice:
 		if die.locked:
@@ -217,6 +245,7 @@ func throw_all(direction: Vector2, speed: float) -> void:
 
 ## Every unlocked die jumps up, as if the surface had been tapped from underneath.
 func jump_all() -> void:
+	_unpin()
 	for die in dice:
 		if die.locked:
 			continue
@@ -228,10 +257,12 @@ func jump_all() -> void:
 
 ## Puts a finger down on the die under a point of the view. Returns true on a
 ## hit. The die then follows the finger until `end_touch`.
-func begin_touch(view_position: Vector2) -> bool:
+func begin_touch(view_position: Vector2, offers_menu: bool = true) -> bool:
 	var hit := _die_hit(view_position)
 	if hit.is_empty():
 		return false
+	_grab_offers_menu = offers_menu
+	_unpin()
 	_grabbed = hit["collider"]
 	_grabbed.sleeping = false
 	_grab_local_point = _grabbed.to_local(hit["position"])
@@ -243,7 +274,13 @@ func begin_touch(view_position: Vector2) -> bool:
 	return true
 
 
-## Whether a die is under a point of the view, without picking it up.
+## The die under a point of the view, if any, without picking it up.
+func die_at(view_position: Vector2) -> Die:
+	var hit := _die_hit(view_position)
+	return hit["collider"] if not hit.is_empty() else null
+
+
+## Whether a die is under a point of the view.
 func is_die_at(view_position: Vector2) -> bool:
 	return not _die_hit(view_position).is_empty()
 
@@ -458,6 +495,7 @@ func is_dragging() -> bool:
 ## Takes the padlock off every locked die. With auto lock on, they stay free for a second before it
 ## may lock them again.
 func unlock_all() -> void:
+	_unpin()
 	for die in dice:
 		if die.locked:
 			die.set_locked(false)
@@ -494,16 +532,48 @@ func _lock_dice_that_landed(delta: float) -> void:
 
 
 func _unsettle() -> void:
+	_unpin()
 	_rest.clear()
 	_emit_results()
 
 
+## Lets the held dice go.
+func _unpin() -> void:
+	if not _pinned:
+		return
+	_pinned = false
+	_pin_left = 0.0
+	for die in dice:
+		die.pin(false)
+
+
 func _check_settled(delta: float) -> void:
+	if _pinned:
+		_pin_left -= delta
+		if _pin_left <= 0.0:
+			_pin_spent = true
+			_unpin()
 	for die in dice:
 		# A die pressed down, or held in a finger, is slow without having landed: it does not count
 		# as settled until it is let go.
 		var landed := die.is_at_rest() and (die.locked or (not _pressing and die != _grabbed))
 		_rest[die] = (float(_rest.get(die, 0.0)) + delta) if landed else 0.0
+	var all_settled := not dice.is_empty() and _grabbed == null and not _pressing
+	for die in dice:
+		if float(_rest.get(die, 0.0)) < SETTLE_HOLD:
+			all_settled = false
+	# A die jostled for a split second as it is let go does not count as the dice moving again.
+	var still_moving := false
+	for die in dice:
+		still_moving = still_moving or not die.is_at_rest()
+	_moving_time = (_moving_time + delta) if still_moving else 0.0
+	if _moving_time > PIN_REARM_SECONDS:
+		_pin_spent = false
+	if all_settled and not _pinned and not _pin_spent:
+		_pinned = true
+		_pin_left = PIN_SECONDS
+		for die in dice:
+			die.pin(true)
 	_emit_results()
 
 
@@ -520,7 +590,7 @@ func _emit_results() -> void:
 
 ## Holding a finger still on a die lets the owner offer what to do with it.
 func _check_long_press(delta: float) -> void:
-	if _grabbed == null or _grab_travel >= TAP_DISTANCE:
+	if _grabbed == null or not _grab_offers_menu or _grab_travel >= TAP_DISTANCE:
 		return
 	_grab_time += delta
 	if _grab_time >= LONG_PRESS_SECONDS:
