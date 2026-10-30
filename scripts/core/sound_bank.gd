@@ -9,6 +9,13 @@ const BUZZER_SOUNDS: Array[String] = ["buzz", "ding", "horn", "siren"]
 ## The icon that stands for each buzzer sound.
 const BUZZER_ICONS := {"buzz": "circle-x", "ding": "bell", "horn": "megaphone", "siren": "siren"}
 
+## The recordings that stand in for sounds in the "rpg" theme, by what they are for.
+const RPG_FILES := {"chain": "lock", "unchain": "unlock", "chime": "chime", "ding": "ding"}
+## What the "rpg" theme holds down: a low bronze gong, a war horn and an alarm bell.
+const RPG_HELD := {"buzz": "buzz_loop", "horn": "horn_loop", "siren": "siren_loop"}
+## How many recordings of a die knocking there are.
+const KNOCKS := 4
+
 static var _cache := {}
 
 
@@ -23,16 +30,48 @@ static func play_once(host: Node, kind: String) -> void:
 	player.play()
 
 
+## The sound for something that happens, in the sound theme that is chosen now. Sounds the
+## theme does not change are the same in every theme.
 static func stream(kind: String) -> AudioStreamWAV:
-	if not _cache.has(kind):
-		_cache[kind] = _build(kind)
-	return _cache[kind]
+	if AppSettings.sound_theme == "rpg":
+		# A die knocking is one of four recordings of wood on wood, a different one each time.
+		if kind == "tick":
+			return _recording("knock_%d" % (randi() % KNOCKS + 1))
+		var file: String = RPG_FILES.get(kind, "")
+		if file != "":
+			return _recording(file)
+	var key := "future:" + kind
+	if not _cache.has(key):
+		_cache[key] = _build(kind)
+	return _cache[key]
+
+
+## A recording of the "rpg" theme, loaded once.
+static func _recording(file: String) -> AudioStreamWAV:
+	var key := "rpg:" + file
+	if not _cache.has(key):
+		_cache[key] = load("res://assets/sounds/rpg/%s.wav" % file) as AudioStreamWAV
+	return _cache[key]
+
+
+## The same, set to go round and round, for a sound held down.
+static func _recorded_loop(file: String) -> AudioStreamWAV:
+	var key := "rpg:loop:" + file
+	if not _cache.has(key):
+		var wav := (load("res://assets/sounds/rpg/%s.wav" % file) as AudioStreamWAV).duplicate() as AudioStreamWAV
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		wav.loop_begin = 0
+		wav.loop_end = wav.data.size() / 2
+		_cache[key] = wav
+	return _cache[key]
 
 
 ## A version of a sound that keeps going for as long as it is held, or null for
 ## a sound that only makes sense once, like a bell. Each is a whole number of
 ## cycles, so the join where it loops cannot be heard.
 static func sustained(kind: String) -> AudioStreamWAV:
+	if AppSettings.sound_theme == "rpg" and RPG_HELD.has(kind):
+		return _recorded_loop(RPG_HELD[kind])
 	var key := "sustained_" + kind
 	if _cache.has(key):
 		return _cache[key]

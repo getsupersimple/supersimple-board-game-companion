@@ -64,10 +64,11 @@ func _gui_input(event: InputEvent) -> void:
 		var rows := int(_drag_remainder / ROW_HEIGHT)
 		if rows != 0:
 			_drag_remainder -= rows * ROW_HEIGHT
-			_adjust(-rows * _step_for(event.velocity.y))
+			_adjust(-rows * step_for(event.velocity.y))
 
 
-func _step_for(speed: float) -> int:
+## How many seconds a row is worth at a given drag speed.
+static func step_for(speed: float) -> int:
 	if absf(speed) > FAST_FLICK:
 		return FAST_STEP
 	if absf(speed) > MEDIUM_FLICK:

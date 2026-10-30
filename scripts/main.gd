@@ -31,11 +31,13 @@ func _on_game_selected(game_id: String) -> void:
 
 
 func _show_settings() -> void:
+	_game_screen.close_game()
 	_home.visible = false
 	_settings.visible = true
 
 
 func _show_home() -> void:
+	_game_screen.close_game()
 	_game_screen.visible = false
 	_settings.visible = false
 	_home.visible = true

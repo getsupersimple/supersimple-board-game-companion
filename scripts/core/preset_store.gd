@@ -59,6 +59,33 @@ func delete_game(game_id: String) -> void:
 	save_store()
 
 
+func set_game_color(game_id: String, color: Color) -> void:
+	var game := get_game(game_id)
+	if game == null:
+		return
+	game.color = color
+	save_store()
+
+
+## Moves a game to a place in the list. The built-in Quick game stays first.
+func move_game(game_id: String, to_index: int) -> void:
+	var game := get_game(game_id)
+	if game == null or game.is_builtin:
+		return
+	games.erase(game)
+	var first := 1 if not games.is_empty() and games[0].is_builtin else 0
+	games.insert(clampi(to_index, first, games.size()), game)
+	save_store()
+
+
+func set_game_icon(game_id: String, icon: String) -> void:
+	var game := get_game(game_id)
+	if game == null:
+		return
+	game.icon = icon
+	save_store()
+
+
 func add_preset(game_id: String, preset: Preset) -> void:
 	var game := get_game(game_id)
 	if game == null:
@@ -101,6 +128,44 @@ func move_preset(game_id: String, from_index: int, to_index: int) -> void:
 	var preset := game.presets[from_index]
 	game.presets.remove_at(from_index)
 	game.presets.insert(to_index, preset)
+	save_store()
+
+
+## Puts a preset into the toolbar at `bar_index`, counting only the presets that are
+## in the toolbar. A preset that was loose on the screen stops being loose.
+func place_in_bar(game_id: String, preset_id: String, bar_index: int) -> void:
+	var game := get_game(game_id)
+	if game == null:
+		return
+	var preset := game.find_preset(preset_id)
+	if preset == null:
+		return
+	game.presets.erase(preset)
+	preset.has_position = false
+	var insert_at := game.presets.size()
+	var seen := 0
+	for i in game.presets.size():
+		if game.presets[i].has_position:
+			continue
+		if seen == bar_index:
+			insert_at = i
+			break
+		seen += 1
+	game.presets.insert(insert_at, preset)
+	save_store()
+
+
+## Takes a preset out of the toolbar and leaves it on the screen, centred at
+## `fraction` of the screen's size.
+func place_on_screen(game_id: String, preset_id: String, fraction: Vector2) -> void:
+	var game := get_game(game_id)
+	if game == null:
+		return
+	var preset := game.find_preset(preset_id)
+	if preset == null:
+		return
+	preset.has_position = true
+	preset.position = fraction
 	save_store()
 
 

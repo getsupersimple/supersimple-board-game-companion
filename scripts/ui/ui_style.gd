@@ -5,6 +5,8 @@ extends RefCounted
 
 const INK := Color("#1C1C1E")
 const PANEL := Color("#EDEDF2")
+## The square buttons along the top of a screen, all this size so they line up.
+const TOP_BUTTON := 120
 
 const _ICON_STATES: Array[String] = ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]
 const _FONT_STATES: Array[String] = ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]

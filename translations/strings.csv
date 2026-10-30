@@ -9,12 +9,20 @@ TOOLBAR_ADD,Add
 TOOLBAR_DONE,Done
 TOOLBAR_DELETE,Delete
 PRESET_DICE,Dice
-PRESET_TIMER,Timer
-PRESET_TIMER_2P,Two-player timer
 PRESET_BUZZER,Buzzer
 DICE_ROLL,Roll
-TIMER_COUNT_UP,Count up
-TIMER_RESET_EACH_TURN,Reset each turn
+DICE_COLOR,Die colour
+DICE_ADD,Add a die
+HOME_MENU_ICON,Icon
+HOME_MENU_COLOR,Colour
+HOME_MENU_THEME,Theme
+HOME_MENU_DELETE,Delete
+DICE_AUTO_LOCK,Auto lock all
+DICE_UNLOCK_ALL,Unlock all
+DICE_LOCK,Lock
+DICE_UNLOCK,Unlock
+DICE_REMOVE,Remove
+DICE_CHANGE_COLOR,Colour
 BUZZER_BUZZ,Wrong answer buzzer
 BUZZER_DING,Bell
 BUZZER_HORN,Horn
@@ -32,3 +40,9 @@ That's why I started building Supersimple apps: they do what they say and don't 
 If this app is useful to you, you can chip in below. Thank you!"
 CREDITS_SUPPORT,Support me on PayPal
 CREDITS_SOURCE,Open source on GitHub
+HOURGLASS_TILT,Sand follows the tilt of the phone
+HOURGLASS_TIMED,Sand runs on a timer
+HOURGLASS_RESET,Start the sand over
+TIMER_MENU_GRAVITY,Gravity
+TIMER_MENU_SOUND,Sound
+TIMER_TYPE,Kind of timer

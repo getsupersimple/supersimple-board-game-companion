@@ -1,5 +1,5 @@
 class_name HourglassSand
-extends Node2D
+extends SandGlass
 ## An hourglass whose sand is real physics. Grains are small rigid bodies in a
 ## glass-shaped container, pulled by whichever way gravity points on the screen.
 ##
@@ -9,22 +9,14 @@ extends Node2D
 ## one per grain-worth of time, measured on the system clock. Adding time pours
 ## more grains in at the top, and taking time away lifts some out.
 
-signal drained
-## A grain has hit something: how hard (0 to 1), and whether it hit the glass or other sand.
-
-## The size of the picture the glass is drawn into, in pixels.
-const VIEW_SIZE := Vector2i(660, 1430)
 ## About how many grains a glass starts with.
-const BASE_GRAINS := 550
+const BASE_GRAINS := 1000
 ## The most grains the falling side holds. Past it, each grain is worth more time.
-const MAX_UPSTREAM := 900
-const GRAIN_RADIUS := 3.6
+const MAX_UPSTREAM := 1500
+const GRAIN_RADIUS := 2.1
 const GRAVITY := 2000.0
 const GATE_THICKNESS := 14.0
 const WALL_THICKNESS := 40.0
-## How close to vertical the glass must be for the sand to run, as the share of
-## gravity that lies along the screen's up and down. Below it the glass is paused.
-const FLOW_THRESHOLD := 0.5
 ## Sand cannot pour faster than the neck lets it, so a grain is never worth less.
 const MIN_GRAIN_MS := 60.0
 const MAX_ALLOWANCE := 6.0
@@ -37,30 +29,14 @@ const TAIL_PULL := 0.9
 const STALL_MS := 300
 const TAP_REACH := 110.0
 const TAP_SPEED := 90.0
-## The soft shh of sand: it fades in when grains start crossing the neck or the sand
-## is stirred about,
-## fades away over the last moments before the sand runs out, and even at its
-## loudest it is quiet.
-const POUR_DB := -36.0
-const POUR_QUIET_DB := -60.0
+## The soft shh of sand fades in when grains start crossing the neck or the sand
+## is stirred about, and fades away over the last moments before the sand runs out.
 const POUR_HOLD_MS := 400
-const POUR_ATTACK := 1.4
-const POUR_RELEASE := 4.0
-## The shh starts to fade this long before the last of the sand is through.
-const POUR_FADE_MS := 2000.0
 ## Sand shifting about makes the same sound: a grain this fast is moving, and the
 ## shh reaches full when this share of the grains are.
 const MOVING_SPEED := 150.0
 const MOVING_SHARE_QUIET := 0.03
 const MOVING_SHARE_FULL := 0.25
-
-## Which way gravity pulls on the screen, from 0 (none) to 1 (a full pull). The
-## direction is a unit vector in screen axes, with y pointing down the screen.
-var gravity_direction := Vector2.DOWN
-var gravity_strength := 1.0
-var sand_color := Color("#9B59D0")
-## The colour of the caps on the glass.
-var cap_color := Color("#E5484D")
 
 var grains: Array[RigidBody2D] = []
 
@@ -77,22 +53,19 @@ var _drained_reported := false
 ## Some sand has run through since the glass was last full or last drained.
 var _sand_has_passed := false
 var _material: PhysicsMaterial
-## Muted while the glass is out of sight, so it does not hiss from behind another screen.
-var muted := false
-## Holds every grain still, for as long as it is true, and lets them go again after.
-var frozen := false:
-	set(value):
-		frozen = value
-		for grain in grains:
-			_set_frozen(grain)
-		if not frozen:
-			_wake_everything()
 
 var _total_when_ready := 60000
-var _pour: AudioStreamPlayer
-var _pour_level := 0.0
+var _hiss: SandHiss
 var _last_pour_ms := -100000
 var _last_state := Vector3.ZERO
+
+
+func set_frozen(value: bool) -> void:
+	frozen = value
+	for grain in grains:
+		_set_frozen(grain)
+	if not frozen:
+		_wake_everything()
 
 
 func _ready() -> void:
@@ -102,9 +75,8 @@ func _ready() -> void:
 	_build_walls()
 	_build_gate()
 	_build_art()
-	_pour = AudioStreamPlayer.new()
-	_pour.stream = SoundBank.sand_loop()
-	add_child(_pour)
+	_hiss = SandHiss.new()
+	add_child(_hiss)
 	set_total_ms(_total_when_ready)
 
 
@@ -128,11 +100,6 @@ func set_total_ms(total_ms: int) -> void:
 	_sand_has_passed = false
 
 
-## Pours the sand back into the top chamber, ready to run again.
-func reset() -> void:
-	set_total_ms(total_ms())
-
-
 ## What the whole glass is worth, in milliseconds.
 func total_ms() -> int:
 	if grains.is_empty():
@@ -147,11 +114,6 @@ func remaining_ms() -> int:
 
 func upstream_count() -> int:
 	return _upstream
-
-
-## True while the sand is running: the glass is near enough to upright either way up.
-func is_flowing() -> bool:
-	return gravity_strength > 0.05 and absf(gravity_direction.y) * gravity_strength >= FLOW_THRESHOLD
 
 
 ## Changes how long the whole glass lasts, which is all of the sand in it, wherever
@@ -292,20 +254,12 @@ func _stirring() -> float:
 
 ## Fades the shh up while sand is pouring or moving and away when it stops.
 func _update_pour_sound(delta: float) -> void:
-	var pouring := not frozen and not muted and AppSettings.sand_sound \
-			and Time.get_ticks_msec() - _last_pour_ms < POUR_HOLD_MS
-	var ending := clampf(remaining_ms() / POUR_FADE_MS, 0.0, 1.0)
-	var wanted := ending if pouring else 0.0
-	if not frozen and not muted and AppSettings.sand_sound:
+	var audible := not frozen and not muted and AppSettings.sand_sound
+	var pouring := audible and Time.get_ticks_msec() - _last_pour_ms < POUR_HOLD_MS
+	var wanted := SandHiss.pouring_level(remaining_ms()) if pouring else 0.0
+	if audible:
 		wanted = maxf(wanted, _stirring())
-	_pour_level = move_toward(_pour_level, wanted, (POUR_ATTACK if wanted > _pour_level else POUR_RELEASE) * delta)
-	if _pour_level <= 0.001:
-		if _pour.playing:
-			_pour.stop()
-		return
-	if not _pour.playing:
-		_pour.play()
-	_pour.volume_db = lerpf(POUR_QUIET_DB, POUR_DB, _pour_level)
+	_hiss.update(delta, wanted)
 
 
 ## Works out which side of the neck every grain is on. Returns how many crossed.
@@ -402,9 +356,7 @@ func _build_art() -> void:
 	var mass := SandMass.new()
 	add_child(mass)
 	mass.setup(grains, VIEW_SIZE, sand_color)
-	var front := ArtLayer.new()
-	front.draw_function = HourglassArt.draw_front.bind(cap_color)
-	add_child(front)
+	_add_front()
 
 
 func _build_walls() -> void:

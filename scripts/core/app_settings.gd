@@ -9,6 +9,9 @@ static var dice_sound := true
 static var timer_buzzer := true
 static var haptics := true
 static var sand_sound := true
+## The set of sounds in use right now, "future" or "rpg". Not saved: the tool on show sets it
+## from its own theme (see Themes).
+static var sound_theme := "future"
 
 
 ## Reads and writes a switch by name, so a settings row can be built from a list.

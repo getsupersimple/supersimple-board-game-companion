@@ -6,12 +6,13 @@ extends Node2D
 ## a threshold there is sand, shaded by the slope of the pile. It is cut
 ## to the shape of the glass, so no sand is ever drawn outside it.
 
-const BLOB_RADIUS := 7.0
+const BLOB_RADIUS := 5.5
 
 var grains: Array[RigidBody2D]
 
 var _blobs: Node2D
 var _density: SubViewport
+var _material: ShaderMaterial
 
 
 func setup(source: Array[RigidBody2D], size: Vector2i, color: Color) -> void:
@@ -43,6 +44,7 @@ func setup(source: Array[RigidBody2D], size: Vector2i, color: Color) -> void:
 	shader_material.shader = load("res://scripts/hourglass/sand.gdshader")
 	shader_material.set_shader_parameter("density", _density.get_texture())
 	shader_material.set_shader_parameter("sand", color)
+	_material = shader_material
 	# Sand is only drawn where the glass is, whatever a grain does at its edge.
 	shader_material.set_shader_parameter("widths", HourglassShape.widths_texture())
 	shader_material.set_shader_parameter("glass_top", get_parent().global_position)
@@ -50,6 +52,12 @@ func setup(source: Array[RigidBody2D], size: Vector2i, color: Color) -> void:
 	shader_material.set_shader_parameter("view_size", Vector2(size))
 	picture.material = shader_material
 	add_child(picture)
+
+
+## Dyes the sand another colour, grains and all, while it runs.
+func recolor(color: Color) -> void:
+	if _material != null:
+		_material.set_shader_parameter("sand", color)
 
 
 ## The soft white blob drawn for each grain.

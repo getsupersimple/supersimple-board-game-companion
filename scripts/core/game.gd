@@ -50,6 +50,7 @@ static func from_dict(source: Dictionary) -> Game:
 	var raw_presets: Variant = source.get("presets", [])
 	if raw_presets is Array:
 		for raw_preset in raw_presets:
-			if raw_preset is Dictionary:
+			# Presets of a removed tool are dropped.
+			if raw_preset is Dictionary and Preset.is_known_type(int(raw_preset.get("type", Preset.Type.DICE))):
 				game.presets.append(Preset.from_dict(raw_preset))
 	return game

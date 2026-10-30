@@ -8,6 +8,16 @@ extends Node3D
 signal results_changed(values: Array)
 
 const GRAVITY := 15.0
+## A die with a finger held on it is pulled straight down this many times harder.
+const HEAVY_GRAVITY := 8.0
+## How much more a pressed-down die weighs for each unit it is above the table, and how hard it
+## shoves a die beneath it aside, as a share of the pressing force.
+const PRESS_HEIGHT_GAIN := 4.0
+const PRESS_SHOVE := 0.6
+## How fast a cocked die is turned flat while pressed, and how much harder everything pushes for
+## each second the press goes on.
+const PRESS_TURN := 120.0
+const PRESS_RAMP := 1.5
 ## On iOS the gravity reading points at the ground in the device's frame (flat
 ## and face up reads -z). Other platforms may differ, which flips this sign.
 const SENSOR_SIGN := 1.0
@@ -36,18 +46,41 @@ const LONG_PRESS_SECONDS := 0.5
 const RELEASE_MAX_SPEED := 10.0
 const RELEASE_SPEED_KEPT := 1.3
 const SHAKE_COOLDOWN := 0.5
-const CAMERA_HEIGHT := 14.0
-const FIELD_OF_VIEW := 40.0
+## A die must lie flat and still this long before auto lock takes it.
+const AUTO_LOCK_HOLD := 0.35
+## After Unlock all, auto lock waits this long before it may lock anything again.
+const AUTO_LOCK_PAUSE := 1.0
+const CAMERA_HEIGHT := 20.0
+## The camera looks straight down without perspective, so a die is drawn the same size and
+## in the same place at any height, and the walls can stand right at the edge of the view.
+const VIEW_WIDTH := 9.4
 const WALL_THICKNESS := 2.0
+## The share of the visible floor inside the walls: nearly all of it, so the dice can go right
+## down to the edge of the view.
+const VIEW_FILL := 0.985
+## A tap on the table sends every die up at about this speed.
+const JUMP_SPEED := 4.5
 ## The screen glass: dice stay inside a shallow box, as on a real device.
-const CEILING_HEIGHT := 3.2
+const CEILING_HEIGHT := 6.0
+## Dice are dropped in from no higher than this.
+const DROP_HEIGHT := 2.0
+
+## A finger has stayed on this die without moving. `view_position` is where it is.
+signal die_held(die: Die, view_position: Vector2)
 
 var dice: Array[Die] = []
+## The view onto the table, for working out where a die is on the screen.
+var camera: Camera3D
+## While on, a die is locked in place as soon as it lies flat and still.
+var auto_lock := false
 
 var _half_extents := Vector2(5.0, 9.0)
 var _gravity_direction := Vector3.DOWN
-var _settle_time := 0.0
-var _settled := true
+var _pressing := false
+## How long the table has been pressed, which makes the pressing harder the longer it goes on.
+var _press_time := 0.0
+## How long each die has been at rest; a die counts as settled after SETTLE_HOLD.
+var _rest := {}
 var _last_values: Array = []
 var _shake_cooldown := 0.0
 var _accel_baseline := Vector3.ZERO
@@ -57,10 +90,15 @@ var _grab_target := Vector3.ZERO
 var _grab_height := 0.0
 var _grab_travel := 0.0
 var _grab_time := 0.0
+var _grab_view := Vector2.ZERO
 var _voices: Array[AudioStreamPlayer] = []
 var _next_voice := 0
 var _last_haptic_ms := 0
 var _bounds: Node3D
+var _flat_time := {}
+var _auto_lock_pause := 0.0
+## A die that has just been unlocked waits this long (seconds, counting down) before auto lock takes it again.
+var _hold_off := {}
 
 
 func _ready() -> void:
@@ -75,7 +113,10 @@ func _ready() -> void:
 
 ## Fits the walls to the visible floor. Call whenever the view is resized.
 func set_view_aspect(aspect: float) -> void:
-	var half_width := CAMERA_HEIGHT * tan(deg_to_rad(FIELD_OF_VIEW / 2.0)) * 0.9
+	# The camera is a perspective one, so the top of a die is drawn further out than
+	# the floor under it. The walls stand in far enough that no die, even the tallest,
+	# is drawn past the edge of the view.
+	var half_width := VIEW_WIDTH / 2.0 * VIEW_FILL
 	_half_extents = Vector2(half_width, half_width / aspect)
 	if is_inside_tree():
 		_rebuild_bounds()
@@ -88,15 +129,15 @@ func add_die(side_count: int, color: Color, style: Die.NumeralStyle = Die.Numera
 	add_child(die)
 	die.position = Vector3(
 		randf_range(-_half_extents.x, _half_extents.x) * 0.6,
-		minf(1.6 + dice.size() * 0.15, CEILING_HEIGHT - 1.2),
+		minf(1.6 + dice.size() * 0.15, DROP_HEIGHT),
 		randf_range(-_half_extents.y, _half_extents.y) * 0.6)
 	die.basis = Basis(Quaternion(Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized(), randf() * TAU))
 	die.linear_velocity = Vector3(0, -2.0, 0)
 	die.angular_velocity = _random_spin(8.0)
 	die.impact.connect(_on_impact)
+	die.unlocked.connect(func() -> void: _hold_off[die] = AUTO_LOCK_PAUSE)
 	dice.append(die)
-	_settled = false
-	_settle_time = 0.0
+	_unsettle()
 	_emit_results()
 	return die
 
@@ -117,19 +158,33 @@ func _on_impact(strength: float) -> void:
 	if AppSettings.dice_sound:
 		var voice := _voices[_next_voice]
 		_next_voice = (_next_voice + 1) % _voices.size()
+		voice.stream = SoundBank.stream("tick")
 		voice.volume_db = linear_to_db(clampf(strength / LOUD_SPEED, 0.08, 1.0))
 		voice.pitch_scale = randf_range(0.85, 1.25) - minf(strength / LOUD_SPEED, 1.0) * 0.2
 		voice.play()
 	var now := Time.get_ticks_msec()
-	if AppSettings.haptics and strength >= HAPTIC_SPEED and now - _last_haptic_ms >= HAPTIC_GAP_MS:
+	if strength >= HAPTIC_SPEED and now - _last_haptic_ms >= HAPTIC_GAP_MS:
 		_last_haptic_ms = now
-		Input.vibrate_handheld(12)
+		Haptics.pulse(12)
+
+
+## While a finger is held on the bare table every free die is held down like a held die: pulled
+## hard onto the table and damped, so the lot settle at once.
+func press_down(on: bool) -> void:
+	_press_time = 0.0
+	_pressing = on
+	for die in dice:
+		# Letting go reaches locked dice too: one that auto lock froze during the press is
+		# still weighted and damped, and would stay stuck once unlocked.
+		if not on or not die.locked:
+			die.hold(on)
 
 
 func remove_die(die: Die) -> void:
 	for doomed in [die, die.partner]:
 		if doomed != null:
 			dice.erase(doomed)
+			_hold_off.erase(doomed)
 			doomed.queue_free()
 	_emit_results()
 
@@ -143,9 +198,32 @@ func roll_all() -> void:
 		var heading := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
 		die.linear_velocity = heading * randf_range(5.0, 9.0) + Vector3.UP * randf_range(2.5, 5.0)
 		die.angular_velocity = _random_spin(20.0)
-	_settled = false
-	_settle_time = 0.0
+	_unsettle()
 	_emit_results()
+
+
+## Throws every unlocked die the way a swipe went: `direction` is on the table's floor (x across,
+## y down the screen), `speed` how hard.
+func throw_all(direction: Vector2, speed: float) -> void:
+	var heading := Vector3(direction.x, 0.0, direction.y).normalized()
+	for die in dice:
+		if die.locked:
+			continue
+		die.sleeping = false
+		die.linear_velocity = heading * speed * randf_range(0.85, 1.15) + Vector3.UP * randf_range(2.5, 4.5)
+		die.angular_velocity = _random_spin(20.0)
+	_unsettle()
+
+
+## Every unlocked die jumps up, as if the surface had been tapped from underneath.
+func jump_all() -> void:
+	for die in dice:
+		if die.locked:
+			continue
+		die.sleeping = false
+		die.linear_velocity += Vector3.UP * randf_range(JUMP_SPEED * 0.8, JUMP_SPEED * 1.2)
+		die.angular_velocity += _random_spin(4.0)
+	_unsettle()
 
 
 ## Puts a finger down on the die under a point of the view. Returns true on a
@@ -165,6 +243,7 @@ func begin_touch(view_position: Vector2) -> bool:
 	_grab_target = hit["position"]
 	_grab_travel = 0.0
 	_grab_time = 0.0
+	_grab_view = view_position
 	return true
 
 
@@ -180,6 +259,7 @@ func move_touch(view_position: Vector2) -> void:
 	var target: Vector3 = point
 	target.x = clampf(target.x, -_half_extents.x, _half_extents.x)
 	target.z = clampf(target.z, -_half_extents.y, _half_extents.y)
+	_grab_view = view_position
 	_grab_travel += target.distance_to(_grab_target)
 	_grab_target = target
 
@@ -214,6 +294,8 @@ func nudge(die: Die, touch_point: Vector3 = Vector3.INF) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _pressing:
+		_press_time += delta
 	_apply_gravity()
 	_check_long_press(delta)
 	_drag_grabbed_die()
@@ -221,6 +303,7 @@ func _physics_process(delta: float) -> void:
 	_update_gravity()
 	_check_shake(delta)
 	_check_settled(delta)
+	_lock_dice_that_landed(delta)
 
 
 ## Puts back any die that ended up outside the walls, for example after the
@@ -238,16 +321,61 @@ func _recover_lost_dice() -> void:
 				2.0,
 				clampf(at.z, -_half_extents.y * 0.8, _half_extents.y * 0.8))
 			die.sleeping = false
-			_settled = false
-			_settle_time = 0.0
+			_unsettle()
 			if die.locked:
-				die.rewrap_chain()
+				die.move_padlock()
 
 
 func _apply_gravity() -> void:
 	for die in dice:
-		if not die.locked:
+		if die.locked:
+			continue
+		if die.heavy:
+			# The higher a die is, the harder it is pulled down, so one lying across another
+			# bears down on it and forces it out from underneath.
+			var weight := 1.0 + PRESS_HEIGHT_GAIN * maxf(die.global_position.y, 0.0)
+			die.apply_central_force(Vector3.DOWN * GRAVITY * HEAVY_GRAVITY * weight * die.mass)
+			_shove_out_from_under(die, weight)
+			if _pressing and die.read_value() == -1:
+				_flatten(die, weight)
+		else:
 			die.apply_central_force(_gravity_direction * GRAVITY * die.mass)
+
+
+## A pressed-down die pushes sideways on any die lying lower beneath it, away from itself.
+func _shove_out_from_under(top: Die, weight: float) -> void:
+	for below in dice:
+		if below == top or below.locked or below.global_position.y > top.global_position.y - 0.5:
+			continue
+		var apart := Vector3(below.global_position.x - top.global_position.x, 0.0, below.global_position.z - top.global_position.z)
+		if apart.length() > top.reach() + below.reach():
+			continue
+		if apart.length() < 0.01:
+			apart = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
+		below.sleeping = false
+		below.apply_central_force(apart.normalized() * GRAVITY * HEAVY_GRAVITY * below.mass * weight * PRESS_SHOVE)
+
+
+## A die that is still cocked while pressed is turned towards its nearest flat position and
+## shoves aside whatever it leans on or against, harder the longer it goes on, until it lands.
+func _flatten(die: Die, weight: float) -> void:
+	var ramp := 1.0 + _press_time * PRESS_RAMP
+	var turn := Quaternion(die.flat_transform().basis.orthonormalized() * die.global_transform.basis.orthonormalized().inverse())
+	var angle := turn.get_angle()
+	if angle > PI:
+		angle -= TAU
+	if absf(angle) > 0.02:
+		die.apply_torque(turn.get_axis() * angle * PRESS_TURN * ramp * die.mass)
+	for other in dice:
+		if other == die or other.locked:
+			continue
+		var apart := Vector3(other.global_position.x - die.global_position.x, 0.0, other.global_position.z - die.global_position.z)
+		if apart.length() > die.reach() + other.reach():
+			continue
+		if apart.length() < 0.01:
+			apart = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
+		other.sleeping = false
+		other.apply_central_force(apart.normalized() * GRAVITY * HEAVY_GRAVITY * other.mass * PRESS_SHOVE * ramp)
 
 
 func _update_gravity() -> void:
@@ -312,48 +440,83 @@ func motion_from_accelerometer(raw: Vector3, gravity: Vector3 = Vector3.ZERO) ->
 	return Vector3(moving.x, moving.z, -moving.y)
 
 
-func _check_settled(delta: float) -> void:
-	if dice.is_empty():
-		return
-	var moving := false
+## Whether a finger is dragging a die.
+func is_dragging() -> bool:
+	return _grabbed != null and is_instance_valid(_grabbed)
+
+
+## Takes the padlock off every locked die. With auto lock on, they stay free for a second before it
+## may lock them again.
+func unlock_all() -> void:
 	for die in dice:
-		if not die.is_at_rest():
-			moving = true
-			break
-	if moving:
-		_settle_time = 0.0
-		if _settled:
-			_settled = false
-			_emit_results()
+		if die.locked:
+			die.set_locked(false)
+	_auto_lock_pause = AUTO_LOCK_PAUSE
+	_unsettle()
+
+
+## With auto lock on, locks each die that has lain flat and still for a moment. A die that
+## cannot be locked, say one leaning on another, is left alone until it moves again.
+func _lock_dice_that_landed(delta: float) -> void:
+	if not auto_lock:
+		_flat_time.clear()
 		return
-	_settle_time += delta
-	if not _settled and _settle_time >= SETTLE_HOLD:
-		_settled = true
-		_emit_results()
+	if _auto_lock_pause > 0.0:
+		_auto_lock_pause -= delta
+		_flat_time.clear()
+		return
+	for die in dice:
+		if _hold_off.has(die):
+			_hold_off[die] -= delta
+			if _hold_off[die] <= 0.0:
+				_hold_off.erase(die)
+			else:
+				_flat_time.erase(die)
+				continue
+		if die.locked or die == _grabbed or not die.is_at_rest() or die.read_value() < 0:
+			_flat_time.erase(die)
+			continue
+		var waited: float = _flat_time.get(die, 0.0) + delta
+		_flat_time[die] = waited
+		if waited >= AUTO_LOCK_HOLD:
+			_flat_time[die] = -INF if not die.try_lock() else 0.0
+			_unsettle()
 
 
+func _unsettle() -> void:
+	_rest.clear()
+	_emit_results()
+
+
+func _check_settled(delta: float) -> void:
+	for die in dice:
+		# A die pressed down, or held in a finger, is slow without having landed: it does not count
+		# as settled until it is let go.
+		var landed := die.is_at_rest() and (die.locked or (not _pressing and die != _grabbed))
+		_rest[die] = (float(_rest.get(die, 0.0)) + delta) if landed else 0.0
+	_emit_results()
+
+
+## Each die's value, or -1 for one that has not been at rest long enough to be read. Dice settle
+## one by one, so a colour whose dice have all landed can be read while another is still rolling.
 func _emit_results() -> void:
 	var values: Array = []
 	for die in dice:
-		values.append(die.read_value() if _settled else -1)
+		values.append(die.read_value() if float(_rest.get(die, 0.0)) >= SETTLE_HOLD else -1)
 	if values != _last_values:
 		_last_values = values
 		results_changed.emit(values)
 
 
-## Holding a finger still on a die locks it, or unlocks it if it is locked.
+## Holding a finger still on a die lets the owner offer what to do with it.
 func _check_long_press(delta: float) -> void:
 	if _grabbed == null or _grab_travel >= TAP_DISTANCE:
 		return
 	_grab_time += delta
 	if _grab_time >= LONG_PRESS_SECONDS:
-		if _grabbed.locked:
-			_grabbed.set_locked(false)
-		else:
-			_grabbed.try_lock()
+		var held := _grabbed
 		_grabbed = null
-		_settled = false
-		_settle_time = 0.0
+		die_held.emit(held, _grab_view)
 
 
 func _drag_grabbed_die() -> void:
@@ -363,6 +526,9 @@ func _drag_grabbed_die() -> void:
 		_grabbed = null
 		return
 	if _grabbed.locked:
+		return
+	# A finger that has only come down, and not yet moved, does not push the die about.
+	if _grab_travel < TAP_DISTANCE:
 		return
 	var point := _grabbed.to_global(_grab_local_point)
 	var offset := point - _grabbed.global_position
@@ -381,9 +547,10 @@ func _random_spin(strength: float) -> Vector3:
 
 
 func _build_environment() -> void:
-	var camera := Camera3D.new()
+	camera = Camera3D.new()
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
-	camera.fov = FIELD_OF_VIEW
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = VIEW_WIDTH
 	add_child(camera)
 	camera.look_at_from_position(Vector3(0, CAMERA_HEIGHT, 0), Vector3.ZERO, Vector3(0, 0, -1))
 	camera.current = true
@@ -394,8 +561,9 @@ func _build_environment() -> void:
 	add_child(light)
 
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color.WHITE
+	# The table has no backdrop of its own: the page shows through, and only the shadows
+	# of the dice are drawn on it.
+	environment.background_mode = Environment.BG_CLEAR_COLOR
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color.WHITE
 	environment.ambient_light_energy = 0.55
@@ -428,12 +596,25 @@ func _rebuild_bounds() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(half.x * 2.0 + 8.0, half.y * 2.0 + 8.0)
 	floor_mesh.mesh = plane
-	var floor_material := StandardMaterial3D.new()
-	floor_material.albedo_color = Color("#F3F3F6")
-	floor_material.roughness = 1.0
+	var floor_material := ShaderMaterial.new()
+	floor_material.shader = _shadow_shader()
 	floor_mesh.material_override = floor_material
 	_bounds.add_child(floor_mesh)
 
+
+
+## A floor that is invisible except for the shadows falling on it.
+static func _shadow_shader() -> Shader:
+	var shader := Shader.new()
+	shader.code = """shader_type spatial;
+render_mode unshaded, shadow_to_opacity;
+
+void fragment() {
+	ALBEDO = vec3(0.0);
+	ALPHA = 0.16;
+}
+"""
+	return shader
 
 
 func _add_box(body: StaticBody3D, box_size: Vector3, box_position: Vector3) -> void:

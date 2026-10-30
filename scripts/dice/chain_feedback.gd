@@ -9,12 +9,12 @@ extends RefCounted
 static func locked(host: Node) -> void:
 	_play(host, "chain")
 	# Each step is a delay in seconds, a length in milliseconds, and a strength.
-	_pulse(host, [[0.0, 60, 1.0], [0.075, 12, 0.7], [0.10, 10, 0.5], [0.175, 45, 0.9]])
+	_pulse(host, [[0.0, 60, 1.0], [0.1, 45, 0.9]])
 
 
 static func unlocked(host: Node) -> void:
 	_play(host, "unchain")
-	_pulse(host, [[0.07, 22, 0.45], [0.13, 12, 0.6]])
+	_pulse(host, [[0.07, 22, 0.45]])
 
 
 static func _play(host: Node, kind: String) -> void:
@@ -30,6 +30,6 @@ static func _pulse(host: Node, steps: Array) -> void:
 		var length: int = step[1]
 		var strength: float = step[2]
 		if delay <= 0.0:
-			Input.vibrate_handheld(length, strength)
+			Haptics.pulse(length, strength)
 		else:
-			host.get_tree().create_timer(delay).timeout.connect(func() -> void: Input.vibrate_handheld(length, strength))
+			host.get_tree().create_timer(delay).timeout.connect(func() -> void: Haptics.pulse(length, strength))

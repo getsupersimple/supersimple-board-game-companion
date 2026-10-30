@@ -21,7 +21,7 @@ grow_vertical = 2
 theme_override_constants/margin_left = 48
 theme_override_constants/margin_top = 48
 theme_override_constants/margin_right = 48
-theme_override_constants/margin_bottom = 48
+theme_override_constants/margin_bottom = 120
 
 [node name="Column" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
@@ -40,11 +40,10 @@ expand_icon = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DoneButton" type="Button" parent="Margin/Column/TopBar"]
+[node name="ToolActions" type="HBoxContainer" parent="Margin/Column/TopBar"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(120, 120)
 layout_mode = 2
-expand_icon = true
+theme_override_constants/separation = 16
 
 [node name="MainArea" type="CenterContainer" parent="Margin/Column"]
 layout_mode = 2
@@ -57,18 +56,19 @@ layout_mode = 2
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Picker" type="HBoxContainer" parent="Margin/Column"]
-unique_name_in_owner = true
+[node name="BarRow" type="HBoxContainer" parent="Margin/Column"]
 layout_mode = 2
 theme_override_constants/separation = 24
-alignment = 1
 
-[node name="Scroll" type="ScrollContainer" parent="Margin/Column"]
-custom_minimum_size = Vector2(0, 180)
-layout_mode = 2
-vertical_scroll_mode = 0
-
-[node name="Bar" type="HBoxContainer" parent="Margin/Column/Scroll"]
+[node name="BarSlot" type="Control" parent="Margin/Column/BarRow"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
-theme_override_constants/separation = 24
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="AddButton" type="Button" parent="Margin/Column/BarRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 140)
+layout_mode = 2
+expand_icon = true

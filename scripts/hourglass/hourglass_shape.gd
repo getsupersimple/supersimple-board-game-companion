@@ -3,22 +3,22 @@ extends RefCounted
 ## The outline of the glass, in pixels with the origin at the top centre. Pure
 ## geometry, so it can be tested without a scene. The bottom half mirrors the top.
 ##
-## Each chamber is a straight tube with flat ends, closing down through a cone to
-## the neck, like a plastic egg timer. The join between tube and cone is smoothed
-## so the glass has no hard corner, for the physics walls and the picture alike.
+## Each chamber is a straight tube with flat ends that eases in along a smooth S-shaped
+## curve to a long, narrow neck, like a classic glass hourglass. The curve has no
+## corner anywhere, for the physics walls and the picture alike.
 
 const HEIGHT := 1100.0
 const NECK_Y := 550.0
 const NECK_HALF_WIDTH := 11.0
 ## Half the width of the tubes.
-const TUBE_RADIUS := 130.0
+const TUBE_RADIUS := 158.0
 ## Where the tube ends and the cone begins, counting from the nearer end.
-const TUBE_END_Y := 330.0
+const TUBE_END_Y := 215.0
 ## How round the inside corners of the flat ends are.
 const END_CORNER := 16.0
 ## How far the cap's lip reaches into each end, where no sand is put.
 const CAP_DEPTH := 26.0
-const SMOOTHING_RADIUS := 14
+const SMOOTHING_RADIUS := 8
 const WALL_STEP := 10.0
 
 static var _widths := PackedFloat32Array()
@@ -80,17 +80,21 @@ static func inset(points: PackedVector2Array, distance: float) -> PackedVector2A
 	return moved
 
 
-## Where grains start: packed in rows inside the top chamber (or the bottom one).
+## Where grains start: packed in rows inside the top chamber, filled from the neck up so
+## the sand starts as a heap at the bottom of it, or inside the bottom chamber, filled
+## from the far end.
 static func spawn_positions(count: int, radius: float, in_top_chamber: bool = true) -> PackedVector2Array:
 	var spots := PackedVector2Array()
-	var y := radius * 1.2 + CAP_DEPTH
-	while spots.size() < count and y < NECK_Y - radius * 6.0:
+	var top := radius * 1.2 + CAP_DEPTH
+	var bottom := NECK_Y - radius * 3.5
+	var y := bottom if in_top_chamber else top
+	while spots.size() < count and y >= top and y <= bottom:
 		var room := half_width(y) - radius * 1.3
 		var x := -room
 		while x <= room and spots.size() < count:
 			spots.append(Vector2(x, y if in_top_chamber else HEIGHT - y))
 			x += radius * 2.1
-		y += radius * 1.85
+		y += radius * 1.85 * (-1.0 if in_top_chamber else 1.0)
 	return spots
 
 
@@ -102,8 +106,9 @@ static func _build() -> void:
 	smooth.resize(size)
 	for i in size:
 		var y := float(mini(i, size - 1 - i))
-		var across := (y - TUBE_END_Y) / (NECK_Y - TUBE_END_Y)
-		smooth[i] = lerpf(TUBE_RADIUS, NECK_HALF_WIDTH, clampf(across, 0.0, 1.0))
+		var across := clampf((y - TUBE_END_Y) / (NECK_Y - TUBE_END_Y), 0.0, 1.0)
+		# An S: the glass leaves the tube gently, and eases into the neck the same way.
+		smooth[i] = lerpf(TUBE_RADIUS, NECK_HALF_WIDTH, across * across * (3.0 - 2.0 * across))
 	# Two passes of a moving average round off the joints. The glass is mirrored,
 	# so the neck comes out smooth and symmetrical.
 	for _pass in 2:

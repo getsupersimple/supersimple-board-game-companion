@@ -1,6 +1,6 @@
 # Supersimple Board Game Companion
 
-A free, offline, open source companion for board games: dice, timers, and a buzzer. Part of the SuperSimple app suite.
+A free, offline, open source companion for board games: dice, an hourglass, and a buzzer. Part of the SuperSimple app suite.
 
 See [SPEC.md](SPEC.md) for the agreed design.
 

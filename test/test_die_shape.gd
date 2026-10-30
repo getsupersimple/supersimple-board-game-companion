@@ -139,46 +139,6 @@ func test_locking_freezes_and_unlocking_releases_a_die() -> void:
 	assert_false(die.freeze)
 
 
-func test_chains_pass_over_the_die_and_are_bolted_to_the_table() -> void:
-	for sides in [2, 4, 6, 10, 20]:
-		var die := Die.new()
-		die.setup(sides, Color.RED)
-		add_child_autofree(die)
-		die.set_locked(true)
-		await wait_seconds(0.5)
-		var links: Array[Node3D] = []
-		var plates: Array[Node3D] = []
-		for pivot in die._chain.get_children():
-			if not pivot.has_meta("kind"):
-				continue
-			if pivot.get_meta("kind") == "plate":
-				plates.append(pivot)
-			else:
-				links.append(pivot)
-		assert_eq(plates.size(), 4, "d%d has four anchor plates" % sides)
-		assert_gt(links.size(), 12, "d%d has two chains" % sides)
-		for plate in plates:
-			assert_almost_eq(plate.position.y, 0.0, 0.001)
-		for link in links:
-			var top: float = die._surface_top(link.position)
-			if top > -INF:
-				assert_gt(link.position.y, top, "d%d link rests above the die" % sides)
-
-
-func test_chains_follow_the_dice_rotation() -> void:
-	var die := Die.new()
-	die.setup(6, Color.RED)
-	add_child_autofree(die)
-	# Lying square to the screen: the chains run along the screen axes.
-	var square := absf(die.chain_axis().dot(Vector3.RIGHT))
-	assert_true(is_equal_approx(square, 1.0) or is_equal_approx(square, 0.0), "square die, square chains")
-	# Turned 45 degrees: the chains cross it diagonally.
-	die.global_transform = Transform3D(Basis(Vector3.UP, deg_to_rad(45.0)), Vector3.ZERO)
-	assert_almost_eq(absf(die.chain_axis().dot(Vector3.RIGHT)), sqrt(0.5), 0.01)
-	var perpendicular := die.chain_axis().rotated(Vector3.UP, PI / 2.0)
-	assert_almost_eq(absf(perpendicular.dot(Vector3.RIGHT)), sqrt(0.5), 0.01)
-
-
 func test_locking_a_cocked_die_turns_it_flat_first() -> void:
 	var cases := [
 		[6, Quaternion(Vector3.ONE.normalized(), Vector3.UP)],
@@ -198,7 +158,7 @@ func test_locking_a_cocked_die_turns_it_flat_first() -> void:
 		assert_almost_eq(die.global_position.x, 1.0, 0.001)
 		assert_almost_eq(die.global_position.z, 2.0, 0.001)
 		assert_lt(die.global_position.y, 1.0, "d%d lowered onto the table" % entry[0])
-		assert_not_null(die._chain, "d%d is chained" % entry[0])
+		assert_not_null(die._padlock, "d%d is padlocked" % entry[0])
 
 
 func test_locking_a_flat_die_does_not_move_it() -> void:
@@ -211,54 +171,7 @@ func test_locking_a_flat_die_does_not_move_it() -> void:
 	assert_almost_eq(die.global_position.y, 0.52, 0.001)
 
 
-func test_chain_and_anchors_are_solid_and_push_things_clear() -> void:
-	var die := Die.new()
-	die.setup(6, Color.RED)
-	add_child_autofree(die)
-	die.set_locked(true)
-	assert_eq(die._chain_body.get_child_count(), 10, "four plates and six chain bars")
-	var axis := die.chain_axis()
-	# Something sitting on a plate is pushed out, along the chain's axis.
-	var on_plate := die._chain_overlap(axis * (die._extent_along(axis) + Die.CHAIN_PLATE_GAP), 0.6)
-	assert_ne(on_plate, Vector3.ZERO)
-	# Something across the chain is pushed sideways, away from it.
-	var crossing := die._chain_overlap(axis.rotated(Vector3.UP, PI / 4.0) * 0.1 + axis * 0.8, 0.6)
-	assert_ne(crossing, Vector3.ZERO)
-	# Something well away is left alone.
-	assert_eq(die._chain_overlap(Vector3(5, 0, 5), 0.6), Vector3.ZERO)
-
-
-func test_other_dice_are_shoved_out_of_a_new_chain() -> void:
-	var holder := Node3D.new()
-	add_child_autofree(holder)
-	var locked_die := Die.new()
-	locked_die.setup(6, Color.RED)
-	holder.add_child(locked_die)
-	var bystander := Die.new()
-	bystander.setup(6, Color.BLUE)
-	holder.add_child(bystander)
-	bystander.global_position = Vector3(0.3, 0.5, 0.0)
-	bystander.sleeping = true
-	var before := bystander.global_position
-	locked_die.set_locked(true)
-	await wait_physics_frames(5)
-	assert_false(bystander.sleeping, "the bystander was woken")
-	assert_gt(bystander.global_position.distance_to(before), 0.1, "and shoved out of the way")
-
-
-func test_a_chained_die_shows_its_score_over_the_chains() -> void:
-	for sides in [6, 20, 2]:
-		var die := Die.new()
-		die.setup(sides, Color.RED)
-		add_child_autofree(die)
-		die.set_locked(true)
-		await wait_seconds(0.5)
-		var label: Label3D = die._chain.get_node("ScoreLabel")
-		assert_eq(label.text, str(die.read_value()), "d%d shows its value" % sides)
-		assert_gt(label.position.y, die._highest_point(), "d%d number floats above the die" % sides)
-
-
-func test_a_die_on_top_of_another_cannot_be_chained() -> void:
+func test_a_die_on_top_of_another_cannot_be_locked() -> void:
 	var holder := Node3D.new()
 	add_child_autofree(holder)
 	var lower := Die.new()
@@ -275,10 +188,10 @@ func test_a_die_on_top_of_another_cannot_be_chained() -> void:
 	assert_false(upper.can_lie_flat(), "it would have to go through the die below")
 	assert_false(upper.try_lock())
 	assert_false(upper.locked)
-	assert_null(upper._chain, "no chain was put on")
+	assert_null(upper._padlock, "no padlock was put on")
 
 
-func test_a_die_with_room_to_lie_flat_can_be_chained() -> void:
+func test_a_die_with_room_to_lie_flat_can_be_locked() -> void:
 	var holder := Node3D.new()
 	add_child_autofree(holder)
 	var near := Die.new()
@@ -298,7 +211,7 @@ func test_a_die_with_room_to_lie_flat_can_be_chained() -> void:
 	assert_true(beside.locked)
 
 
-func test_touching_a_neighbour_does_not_stop_a_flat_die_being_chained() -> void:
+func test_touching_a_neighbour_does_not_stop_a_flat_die_being_locked() -> void:
 	var holder := Node3D.new()
 	add_child_autofree(holder)
 	var first := Die.new()
@@ -357,10 +270,38 @@ func test_moving_a_locked_die_does_not_clank_again() -> void:
 	add_child_autofree(die)
 	die.set_locked(true)
 	await wait_seconds(1.0)
-	die.rewrap_chain()
+	die.move_padlock()
 	assert_eq(_sound_players(die).size(), 0, "a quiet re-lay")
 
 
 func test_the_lock_sounds_exist() -> void:
 	assert_gt(SoundBank.stream("chain").data.size(), 5000)
 	assert_gt(SoundBank.stream("unchain").data.size(), 2000)
+
+
+func test_a_locked_die_wears_a_padlock_above_it_and_loses_it_when_unlocked() -> void:
+	for sides in [6, 20, 2]:
+		var die := Die.new()
+		die.setup(sides, Color.RED)
+		add_child_autofree(die)
+		die.set_locked(true)
+		await wait_seconds(0.5)
+		assert_not_null(die._padlock, "d%d has a padlock" % sides)
+		assert_gt(die._padlock.global_position.y, die._highest_point(), "d%d padlock floats above the die" % sides)
+		die.set_locked(false)
+		assert_null(die._padlock, "d%d lost it again" % sides)
+
+
+func test_the_padlock_is_the_same_small_size_on_every_die() -> void:
+	var sizes := []
+	for sides in [4, 6, 20, 2]:
+		var die := Die.new()
+		die.setup(sides, Color.RED)
+		add_child_autofree(die)
+		die.set_locked(true)
+		await wait_seconds(0.5)
+		var icon: Sprite3D = die._padlock.find_children("*", "Sprite3D", true, false)[0]
+		sizes.append(icon.pixel_size * icon.texture.get_width() * die._padlock.scale.x)
+	for size in sizes:
+		assert_almost_eq(size, Die.PADLOCK_SIZE, 0.001)
+	assert_lt(Die.PADLOCK_SIZE, 1.0)

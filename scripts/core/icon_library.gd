@@ -6,8 +6,15 @@ extends RefCounted
 const FOLDER := "res://assets/icons/lucide/"
 const FALLBACK := "dices"
 
-## Icons offered when creating a game, until the icon picker exists.
-const GAME_ICONS: Array[String] = ["dices", "swords", "shield", "timer", "zap"]
+## What a new game starts with, one after another.
+const DEFAULT_GAME_ICONS: Array[String] = ["dices", "swords", "shield", "timer", "zap"]
+## Icons a game can be given, from things that belong in games.
+const GAME_ICONS: Array[String] = [
+	"dices", "swords", "sword", "shield", "crown",
+	"trophy", "gem", "diamond", "spade", "heart",
+	"cross", "star", "target", "ghost", "moon",
+	"flask", "rook", "zap", "timer", "music",
+]
 
 
 static func get_icon(icon_name: String) -> Texture2D:

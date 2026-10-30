@@ -7,6 +7,8 @@ extends RigidBody3D
 ## A knock against the table, a wall, or another die. `strength` is roughly the
 ## speed of the knock in table units per second.
 signal impact(strength: float)
+## A locked die was let go, by whatever means.
+signal unlocked
 
 ## How numerals are printed. Percentile dice are two d10s read together.
 enum NumeralStyle { NORMAL, TENS, UNITS }
@@ -16,33 +18,26 @@ const FLAT_DOT := 0.95
 const REST_LINEAR_SPEED := 0.15
 const REST_ANGULAR_SPEED := 0.3
 const NUMERAL_SIZE := 128
+const NUMERAL_OUTLINE := 10
 const COIN_RADIUS := 0.9
 const COIN_THICKNESS := 0.16
 ## Dice live on their own layer so touches can pick them without hitting the walls.
 const DICE_LAYER := 2
-## The locking chains: two crossed chains pulled taut over the die and bolted to
-## plates on the table, so the die cannot move.
-const CHAIN_LINK_SPACING := 0.27
-const CHAIN_LINK_RADIUS := 0.15
-const CHAIN_SAMPLES := 64
-const CHAIN_PLATE_GAP := 0.4
-const CHAIN_END_HEIGHT := 0.24
-const CHAIN_CROSSING_LIFT := 0.17
 const TABLE_TOP := 0.0
+## The padlock that marks a locked die: how big it is drawn and how far above the die it floats.
+const PADLOCK_SIZE := 0.9
+const PADLOCK_LIFT := 0.25
+## How far out to the side of the die, as a share of its reach, the padlock sits.
+const PADLOCK_SIDE := 0.55
 const FLATTEN_SECONDS := 0.25
 const IMPACT_MIN_SPEED := 1.2
 const IMPACT_COOLDOWN := 0.05
 const FLAT_CLEARANCE := 0.96
-const CHAIN_HALF_WIDTH := 0.22
-const CHAIN_BAR_HEIGHT := 0.32
-const PLATE_HALF_SIZE := 0.375
-const PLATE_HEIGHT := 0.25
-## How hard things in the way are shoved when a chain appears.
-const CLEARING_PUSH := 7.0
-const SCORE_FONT_SIZE := 96
-const SCORE_HEIGHT := 0.8
-const SCORE_OUTLINE := 28
-const SCORE_LIFT := 0.35
+const HELD_DAMPING := 6.0
+const FREE_LINEAR_DAMPING := 0.15
+const FREE_ANGULAR_DAMPING := 0.1
+## The white rim is the die drawn this much bigger; 
+const RIM_SCALE := 1.06
 
 var sides := 0
 var die_color := Color.WHITE
@@ -50,17 +45,18 @@ var numeral_style := NumeralStyle.NORMAL
 ## The other half of a percentile pair. Set on both dice.
 var partner: Die
 var shape_data: DieShape
-## A locked die is held in place by a chain across it: it ignores gravity,
+## A locked die is held in place, marked with a padlock on top: it ignores gravity,
 ## shakes and rolls, but other dice still bump into it.
 var locked := false
-var _chain: Node3D
+var _padlock: Node3D
+static var _bold_cache: Font
+var _surface: StandardMaterial3D
+## Pulled hard down onto the table; see `hold`.
+var heavy := false
+var _numerals: Array[Label3D] = []
 var _last_velocity := Vector3.ZERO
 var _impact_cooldown := 0.0
-var _chain_material: StandardMaterial3D
-var _chain_link_mesh: TorusMesh
-var _chain_body: StaticBody3D
-## Where the chain lies on the table: [from, to, half width] in world space.
-var _chain_footprints: Array = []
+
 
 
 static func is_supported(side_count: int) -> bool:
@@ -81,31 +77,38 @@ func setup(side_count: int, color: Color, style: NumeralStyle = NumeralStyle.NOR
 	# The table applies gravity itself, so it can point in any direction.
 	gravity_scale = 0.0
 	continuous_cd = true
-	linear_damp = 0.15
-	angular_damp = 0.1
+	linear_damp = FREE_LINEAR_DAMPING
+	angular_damp = FREE_ANGULAR_DAMPING
 	var material := PhysicsMaterial.new()
 	material.friction = 1.2
 	material.bounce = 0.25
 	physics_material_override = material
 
-	var surface := StandardMaterial3D.new()
-	surface.albedo_color = color
-	surface.roughness = 0.45
+	_surface = StandardMaterial3D.new()
+	_surface.roughness = 0.4
+	_surface.metallic_specular = 0.5
+	_surface.rim_enabled = true
+	_surface.rim = 0.2
+	_surface.rim_tint = 0.6
+	_surface.emission_enabled = true
+	_apply_color(color)
 	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.material_override = surface
+	mesh_instance.material_override = _surface
 	add_child(mesh_instance)
 	var collision := CollisionShape3D.new()
 	add_child(collision)
 
 	if sides == 2:
 		_setup_coin(mesh_instance, collision)
+		_add_look(mesh_instance)
 		return
 	shape_data = DieShape.create(side_count)
 	mesh_instance.mesh = shape_data.build_mesh()
 	var convex := ConvexPolygonShape3D.new()
 	convex.points = shape_data.vertices
 	collision.shape = convex
-	var text_color := ColorUtils.contrast_color(color)
+	_add_look(mesh_instance)
+	var text_color := Color.WHITE
 	if shape_data.reads_vertex:
 		for face in shape_data.faces:
 			for vertex_id in face.vertex_indices:
@@ -115,9 +118,65 @@ func setup(side_count: int, color: Color, style: NumeralStyle = NumeralStyle.NOR
 			add_child(_make_face_numeral(face, text_color))
 
 
+## Weighs the die down while a finger is on it and a drawer is open: it stops where it is
+## sideways, is pulled hard down onto the table, and is damped so it settles at once. The
+## table does the pulling (see DiceTable). `hold(false)` lets it go.
+func hold(on: bool) -> void:
+	heavy = on
+	if on:
+		linear_velocity = Vector3(0, minf(linear_velocity.y, 0.0), 0)
+		angular_velocity = Vector3.ZERO
+		linear_damp = HELD_DAMPING
+		angular_damp = HELD_DAMPING
+	else:
+		linear_damp = FREE_LINEAR_DAMPING
+		angular_damp = FREE_ANGULAR_DAMPING
+	sleeping = false
+
+
+## Paints the die another colour, numerals and all.
+func set_color(color: Color) -> void:
+	die_color = color
+	_apply_color(color)
+
+
+## Gives the material and the numerals the die's colour: a glossy gem that glows a little.
+func _apply_color(color: Color) -> void:
+	_surface.albedo_color = color.darkened(0.1)
+	_surface.emission = color
+	_surface.emission_energy_multiplier = 0.0
+	for numeral in _numerals:
+		numeral.outline_modulate = color.darkened(0.55)
+
+
+## The pale rim around the die: the die drawn again slightly larger, inside out, in white.
+func _add_look(mesh_instance: MeshInstance3D) -> void:
+	var rim := MeshInstance3D.new()
+	rim.mesh = mesh_instance.mesh
+	rim.scale = Vector3.ONE * RIM_SCALE
+	rim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var white := StandardMaterial3D.new()
+	white.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	white.cull_mode = BaseMaterial3D.CULL_FRONT
+	white.albedo_color = Color(1, 1, 1, 0.95)
+	rim.material_override = white
+	add_child(rim)
+	for numeral in _numerals:
+		numeral.outline_modulate = die_color.darkened(0.55)
+
+
+static func _bold_font() -> Font:
+	if _bold_cache == null:
+		var bold := FontVariation.new()
+		bold.base_font = ThemeDB.fallback_font
+		bold.variation_embolden = 0.9
+		_bold_cache = bold
+	return _bold_cache
+
+
 ## Locks the die if it can lie flat on the table, and says whether it did. A die
 ## lying on top of another, or wedged where turning it flat would push it into
-## something, cannot be chained, so it can never hold a neighbour in place.
+## something, cannot be locked, so it can never hold a neighbour in place.
 func try_lock() -> bool:
 	if can_lie_flat():
 		set_locked(true)
@@ -126,7 +185,7 @@ func try_lock() -> bool:
 	return false
 
 
-## Whether the die's flat position on the table is free of other dice, chains
+## Whether the die's flat position on the table is free of other dice,
 ## and walls. A die that is already flat and clear is its own flat position.
 func can_lie_flat() -> bool:
 	if not is_inside_tree():
@@ -145,8 +204,7 @@ func can_lie_flat() -> bool:
 
 ## A short buzz and a quick pulse of the die, to say it cannot be locked here.
 func _refuse_lock() -> void:
-	if AppSettings.haptics:
-		Input.vibrate_handheld(60)
+	Haptics.pulse(60)
 	for child in get_children():
 		if child is MeshInstance3D:
 			var mesh_node: MeshInstance3D = child
@@ -171,15 +229,17 @@ func set_locked(is_locked: bool) -> void:
 		freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 	freeze = locked
 	sleeping = false
+	if was_locked and not locked:
+		unlocked.emit()
 	if is_inside_tree():
 		if locked:
 			if read_value() == -1:
 				_settle_flat_then_wrap()
 			else:
-				_wrap_chain()
-		elif _chain != null:
-			_chain.queue_free()
-			_chain = null
+				_add_padlock()
+		elif _padlock != null:
+			_padlock.queue_free()
+			_padlock = null
 			if was_locked:
 				ChainFeedback.unlocked(self)
 
@@ -192,7 +252,7 @@ func _settle_flat_then_wrap() -> void:
 	var tween := create_tween()
 	tween.tween_method(func(weight: float) -> void: global_transform = from.interpolate_with(target, weight), 0.0, 1.0, FLATTEN_SECONDS) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_callback(_wrap_chain)
+	tween.tween_callback(_add_padlock)
 
 
 ## Where the die would lie if turned to its nearest flat position, on the table
@@ -221,42 +281,6 @@ func flat_transform() -> Transform3D:
 	return Transform3D(turn * current, Vector3(global_position.x, TABLE_TOP + rest_height, global_position.z))
 
 
-## The die's number, floating over the chains so the score can be read even
-## though the chain covers the face. It always turns to face the camera.
-func _add_score_label() -> void:
-	var label := Label3D.new()
-	label.name = "ScoreLabel"
-	label.text = score_text()
-	label.font_size = SCORE_FONT_SIZE
-	label.pixel_size = SCORE_HEIGHT / SCORE_FONT_SIZE
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.shaded = false
-	label.render_priority = 10
-	label.outline_render_priority = 9
-	label.modulate = Color.WHITE
-	label.outline_modulate = Color("#1C1C1E")
-	label.outline_size = SCORE_OUTLINE
-	label.position = Vector3(global_position.x, _highest_point() + CHAIN_LINK_RADIUS * 2.0 + SCORE_LIFT, global_position.z)
-	label.scale = Vector3.ONE * 0.01
-	_chain.add_child(label)
-	create_tween().tween_property(label, "scale", Vector3.ONE, 0.2) \
-			.set_delay(0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
-## What the number on top of the die says, as the score reads it.
-func score_text() -> String:
-	var value := read_value()
-	if value < 0:
-		return ""
-	match numeral_style:
-		NumeralStyle.TENS:
-			return "%02d" % ((value % 10) * 10)
-		NumeralStyle.UNITS:
-			return str(value % 10)
-	return str(value)
-
-
 func _highest_point() -> float:
 	if sides == 2:
 		return global_position.y + COIN_RADIUS * absf(sin(acos(clampf((global_transform.basis * Vector3.UP).y, -1.0, 1.0)))) + COIN_THICKNESS / 2.0
@@ -266,46 +290,41 @@ func _highest_point() -> float:
 	return top
 
 
-## Shoves other dice out of the way of a chain that has just appeared. They are
-## pushed sideways, away from whatever part of the chain they overlap.
-func _clear_surroundings() -> void:
-	if get_parent() == null:
-		return
-	for other in get_parent().get_children():
-		if not other is Die or other == self or other.locked:
-			continue
-		var reach := _chain_overlap(other.global_position, other.reach())
-		if reach == Vector3.ZERO:
-			continue
-		other.sleeping = false
-		other.apply_central_impulse(reach.normalized() * minf(reach.length() * CLEARING_PUSH + 2.0, 12.0) + Vector3(0, 1.5, 0))
-
-
-## How far a circle on the table sticks into the chain, as a vector pointing out
-## of it, or zero when it is clear.
-func _chain_overlap(at: Vector3, radius: float) -> Vector3:
-	var flat := Vector3(at.x, 0, at.z)
-	for footprint in _chain_footprints:
-		var closest := Geometry3D.get_closest_point_to_segment(flat, footprint[0], footprint[1])
-		var gap := flat.distance_to(closest)
-		var needed: float = footprint[2] + radius
-		if gap < needed:
-			var away := (flat - closest)
-			if away.length() < 0.001:
-				away = Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
-			return away.normalized() * (needed - gap)
-	return Vector3.ZERO
-
-
 ## Roughly how far the die reaches sideways from its centre.
 func reach() -> float:
 	return sqrt(COIN_RADIUS * COIN_RADIUS + COIN_THICKNESS * COIN_THICKNESS / 4.0) if sides == 2 else _circumradius()
 
 
-## Lays the chain again, for when a locked die has been moved.
-func rewrap_chain() -> void:
+## Puts the padlock back on top, for when a locked die has been moved.
+func move_padlock() -> void:
 	if locked and is_inside_tree():
-		_wrap_chain(false)
+		_add_padlock(false)
+
+
+## A gold padlock badge, floating up and to the right of the die and always facing the
+## camera, the way a locked die is drawn in the app's artwork.
+func _add_padlock(with_feedback: bool = true) -> void:
+	if _padlock != null:
+		_padlock.queue_free()
+	_padlock = Node3D.new()
+	_padlock.top_level = true
+	add_child(_padlock)
+	var side := reach() * PADLOCK_SIDE
+	_padlock.global_position = Vector3(global_position.x + side, _highest_point() + PADLOCK_LIFT, global_position.z - side)
+	var texture := load("res://assets/icons/padlock.svg") as Texture2D
+	var icon := Sprite3D.new()
+	icon.texture = texture
+	icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	icon.no_depth_test = true
+	icon.shaded = false
+	icon.pixel_size = PADLOCK_SIZE / texture.get_width()
+	icon.render_priority = 10
+	_padlock.add_child(icon)
+	_padlock.scale = Vector3.ONE * 0.01
+	create_tween().tween_property(_padlock, "scale", Vector3.ONE, 0.2) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if with_feedback:
+		ChainFeedback.locked(self)
 
 
 ## The result, or -1 when the die is not lying flat.
@@ -336,289 +355,6 @@ func _on_body_entered(other: Node) -> void:
 
 func is_at_rest() -> bool:
 	return linear_velocity.length() < REST_LINEAR_SPEED and angular_velocity.length() < REST_ANGULAR_SPEED
-
-
-## Crosses two chains over the die and bolts their ends to the table, like
-## a cargo strap. Everything is placed in world space, which is fine because a
-## locked die does not move.
-func _wrap_chain(with_feedback: bool = true) -> void:
-	if _chain != null:
-		_chain.queue_free()
-	_chain = Node3D.new()
-	_chain.top_level = true
-	add_child(_chain)
-	_chain.global_transform = Transform3D.IDENTITY
-	_ensure_chain_resources()
-	_chain_body = StaticBody3D.new()
-	_chain.add_child(_chain_body)
-	_chain_footprints.clear()
-	var first_axis := chain_axis()
-	var second_axis := first_axis.rotated(Vector3.UP, PI / 2.0)
-	# The second strap passes over the first, so it is lifted where they cross.
-	_lay_strap(first_axis, _extent_along(first_axis), 0.0, 0)
-	_lay_strap(second_axis, _extent_along(second_axis), CHAIN_CROSSING_LIFT, 1)
-	_add_score_label()
-	_clear_surroundings()
-	if with_feedback:
-		ChainFeedback.locked(self)
-
-
-## The direction of the first chain on the table. The chains follow the die: they
-## run along the edges of a square face, and along the numeral's up and across
-## directions on any other face, so a die that lands turned 45 degrees is crossed
-## diagonally. A coin has no orientation, so its chains follow the screen.
-func chain_axis() -> Vector3:
-	var along := Vector3.ZERO
-	if shape_data != null and shape_data.reads_vertex:
-		var top := 0
-		for i in shape_data.vertices.size():
-			if (global_transform.basis * shape_data.vertices[i]).y > (global_transform.basis * shape_data.vertices[top]).y:
-				top = i
-		var other := 1 if top == 0 else 0
-		along = global_transform.basis * (shape_data.vertices[other] - shape_data.vertices[top])
-	elif shape_data != null:
-		var best: DieShape.Face = shape_data.faces[0]
-		for face in shape_data.faces:
-			if (global_transform.basis * face.normal).y > (global_transform.basis * best.normal).y:
-				best = face
-		var ids := best.vertex_indices
-		if ids.size() == 4:
-			along = global_transform.basis * (shape_data.vertices[ids[1]] - shape_data.vertices[ids[0]])
-		else:
-			along = global_transform.basis * (shape_data.vertices[ids[0]] - best.center)
-	along.y = 0.0
-	return along.normalized() if along.length() > 0.2 else Vector3.RIGHT
-
-
-## How far the die reaches from its centre along a horizontal direction.
-func _extent_along(axis: Vector3) -> float:
-	if sides == 2:
-		return sqrt(COIN_RADIUS * COIN_RADIUS + COIN_THICKNESS * COIN_THICKNESS / 4.0)
-	var reach := 0.0
-	for vertex in shape_data.vertices:
-		reach = maxf(reach, absf((global_transform.basis * vertex).dot(axis)))
-	return reach
-
-
-func _lay_strap(axis: Vector3, reach: float, lift: float, strap_index: int) -> void:
-	var centre := global_position
-	var half_length := reach + CHAIN_PLATE_GAP
-	# The strap runs level across the highest point of the die, whatever its
-	# orientation, and slopes straight down to the plates beyond it.
-	var covered: Array[bool] = []
-	var die_top := -INF
-	var first_hit := -1
-	var last_hit := -1
-	for i in CHAIN_SAMPLES + 1:
-		var along := lerpf(-half_length, half_length, float(i) / CHAIN_SAMPLES)
-		var top := _surface_top(centre + axis * along)
-		covered.append(top > -INF)
-		if top > -INF:
-			die_top = maxf(die_top, top)
-			if first_hit < 0:
-				first_hit = i
-			last_hit = i
-	if first_hit < 0:
-		return
-	var level := die_top + CHAIN_LINK_RADIUS + lift
-	var heights: Array[float] = []
-	for i in CHAIN_SAMPLES + 1:
-		if i < first_hit:
-			heights.append(lerpf(CHAIN_END_HEIGHT, level, float(i) / first_hit))
-		elif i > last_hit:
-			heights.append(lerpf(level, CHAIN_END_HEIGHT, float(i - last_hit) / (CHAIN_SAMPLES - last_hit)))
-		else:
-			heights.append(level)
-	var points: Array[Vector3] = []
-	for i in CHAIN_SAMPLES + 1:
-		var along := lerpf(-half_length, half_length, float(i) / CHAIN_SAMPLES)
-		var point := centre + axis * along
-		point.y = maxf(heights[i], CHAIN_END_HEIGHT)
-		points.append(point)
-
-	var total := 0.0
-	for i in CHAIN_SAMPLES:
-		total += points[i].distance_to(points[i + 1])
-	var link_count := maxi(int(round(total / CHAIN_LINK_SPACING)), 6)
-	var step := total / link_count
-	var walked := 0.0
-	var next_link := step / 2.0
-	var placed := 0
-	for i in CHAIN_SAMPLES:
-		var segment := points[i].distance_to(points[i + 1])
-		while placed < link_count and next_link <= walked + segment:
-			var t := (next_link - walked) / maxf(segment, 0.0001)
-			var tangent := (points[i + 1] - points[i]).normalized()
-			_add_chain_link(points[i].lerp(points[i + 1], t), tangent, Vector3.UP, placed + strap_index)
-			placed += 1
-			next_link += step
-		walked += segment
-	for end in [-1.0, 1.0]:
-		_add_anchor_plate(Vector3(centre.x, TABLE_TOP, centre.z) + axis * half_length * end, axis)
-	# The chain is solid: three bars, up the slope, across the die and down.
-	var keys := [points[0], points[first_hit], points[last_hit], points[CHAIN_SAMPLES]]
-	for i in 3:
-		_add_collision_bar(keys[i], keys[i + 1])
-	_chain_footprints.append([Vector3(centre.x, 0, centre.z) - axis * half_length, Vector3(centre.x, 0, centre.z) + axis * half_length, CHAIN_HALF_WIDTH])
-
-
-func _ensure_chain_resources() -> void:
-	if _chain_material != null:
-		return
-	_chain_material = StandardMaterial3D.new()
-	_chain_material.albedo_color = Color("#5D626C")
-	_chain_material.metallic = 0.45
-	_chain_material.roughness = 0.3
-	_chain_link_mesh = TorusMesh.new()
-	_chain_link_mesh.inner_radius = 0.07
-	_chain_link_mesh.outer_radius = 0.2
-	_chain_link_mesh.rings = 20
-	_chain_link_mesh.ring_segments = 10
-
-
-## One link at a point of the chain. Every other link stands on its edge, as in
-## a real chain. The pivot lets the link grow in when the chain appears.
-func _add_chain_link(at: Vector3, tangent: Vector3, up: Vector3, index: int) -> void:
-	var binormal := tangent.cross(up).normalized()
-	var surface_normal := binormal.cross(tangent).normalized()
-	var link := MeshInstance3D.new()
-	link.mesh = _chain_link_mesh
-	link.material_override = _chain_material
-	var basis: Basis
-	if index % 2 == 0:
-		basis = Basis(binormal, surface_normal, binormal.cross(surface_normal))
-	else:
-		basis = Basis(surface_normal, binormal, surface_normal.cross(binormal))
-	link.basis = basis.scaled_local(Vector3(1.0, 1.0, 1.7))
-	var pivot := Node3D.new()
-	pivot.position = at
-	pivot.set_meta("kind", "link")
-	pivot.scale = Vector3.ONE * 0.01
-	pivot.add_child(link)
-	_chain.add_child(pivot)
-	create_tween().tween_property(pivot, "scale", Vector3.ONE, 0.15) \
-			.set_delay(index * 0.01).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
-## A solid bar between two points of a chain, so other dice cannot pass through.
-func _add_collision_bar(from: Vector3, to: Vector3) -> void:
-	var length := from.distance_to(to)
-	if length < 0.01:
-		return
-	var collision := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(CHAIN_HALF_WIDTH * 2.0, CHAIN_BAR_HEIGHT, length)
-	collision.shape = box
-	collision.transform = Transform3D(Basis.looking_at(to - from, Vector3.UP), (from + to) / 2.0)
-	_chain_body.add_child(collision)
-
-
-## A bolted steel plate with an eyelet for the end of a chain.
-func _add_anchor_plate(at: Vector3, axis: Vector3) -> void:
-	var solid := CollisionShape3D.new()
-	var slab_shape := BoxShape3D.new()
-	slab_shape.size = Vector3(PLATE_HALF_SIZE * 2.0, PLATE_HEIGHT, PLATE_HALF_SIZE * 2.0)
-	solid.shape = slab_shape
-	solid.transform = Transform3D(Basis(Vector3.UP, atan2(-axis.z, axis.x)), at + Vector3(0, PLATE_HEIGHT / 2.0, 0))
-	_chain_body.add_child(solid)
-	_chain_footprints.append([at, at, PLATE_HALF_SIZE])
-	var pivot := Node3D.new()
-	pivot.position = at
-	pivot.set_meta("kind", "plate")
-	pivot.basis = Basis(Vector3.UP, atan2(-axis.z, axis.x))
-	var steel := StandardMaterial3D.new()
-	steel.albedo_color = Color("#34363C")
-	steel.metallic = 0.4
-	steel.roughness = 0.5
-	var plate := MeshInstance3D.new()
-	var slab := BoxMesh.new()
-	slab.size = Vector3(0.75, 0.08, 0.75)
-	plate.mesh = slab
-	plate.material_override = steel
-	plate.position.y = 0.04
-	pivot.add_child(plate)
-	var bolt_mesh := CylinderMesh.new()
-	bolt_mesh.top_radius = 0.065
-	bolt_mesh.bottom_radius = 0.065
-	bolt_mesh.height = 0.06
-	bolt_mesh.radial_segments = 6
-	for corner in [Vector2(-0.26, -0.26), Vector2(0.26, -0.26), Vector2(-0.26, 0.26), Vector2(0.26, 0.26)]:
-		var bolt := MeshInstance3D.new()
-		bolt.mesh = bolt_mesh
-		bolt.material_override = _chain_material
-		bolt.position = Vector3(corner.x, 0.1, corner.y)
-		pivot.add_child(bolt)
-	var eyelet := MeshInstance3D.new()
-	var ring := TorusMesh.new()
-	ring.inner_radius = 0.07
-	ring.outer_radius = 0.22
-	eyelet.mesh = ring
-	eyelet.material_override = _chain_material
-	# Stands upright with the chain passing through it.
-	eyelet.basis = Basis(Vector3.RIGHT, PI / 2.0).rotated(Vector3.UP, PI / 2.0)
-	eyelet.position.y = CHAIN_END_HEIGHT
-	pivot.add_child(eyelet)
-	pivot.scale = Vector3.ONE * 0.01
-	_chain.add_child(pivot)
-	create_tween().tween_property(pivot, "scale", Vector3.ONE, 0.2) \
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
-## Height of the die's top surface above a world point, or -INF when the die is
-## not under it. A vertical ray is clipped against the die's faces.
-func _surface_top(world_point: Vector3) -> float:
-	var to_local := global_transform.affine_inverse()
-	var origin := to_local * Vector3(world_point.x, global_position.y + 10.0, world_point.z)
-	var direction := to_local.basis * Vector3.DOWN
-	if sides == 2:
-		return _coin_surface_top(origin, direction, to_local)
-	var near := -INF
-	var far := INF
-	for face in shape_data.faces:
-		var along := face.normal.dot(direction)
-		var distance := face.center.dot(face.normal) - face.normal.dot(origin)
-		if absf(along) < 0.00001:
-			if distance < 0.0:
-				return -INF
-			continue
-		var t := distance / along
-		if along < 0.0:
-			near = maxf(near, t)
-		else:
-			far = minf(far, t)
-	if near > far or far < 0.0:
-		return -INF
-	return (global_transform * (origin + direction * near)).y
-
-
-## The coin is a short cylinder along its local y axis, so it may lie flat or
-## stand on its edge. The ray is clipped against the side and both caps.
-func _coin_surface_top(origin: Vector3, direction: Vector3, to_local: Transform3D) -> float:
-	var half := COIN_THICKNESS / 2.0
-	var near := -INF
-	var far := INF
-	var side_a := direction.x * direction.x + direction.z * direction.z
-	var side_b := 2.0 * (origin.x * direction.x + origin.z * direction.z)
-	var side_c := origin.x * origin.x + origin.z * origin.z - COIN_RADIUS * COIN_RADIUS
-	if side_a > 0.000001:
-		var discriminant := side_b * side_b - 4.0 * side_a * side_c
-		if discriminant < 0.0:
-			return -INF
-		var root := sqrt(discriminant)
-		near = (-side_b - root) / (2.0 * side_a)
-		far = (-side_b + root) / (2.0 * side_a)
-	elif side_c > 0.0:
-		return -INF
-	if absf(direction.y) > 0.000001:
-		var t1 := (-half - origin.y) / direction.y
-		var t2 := (half - origin.y) / direction.y
-		near = maxf(near, minf(t1, t2))
-		far = minf(far, maxf(t1, t2))
-	elif absf(origin.y) > half:
-		return -INF
-	if near > far or far < 0.0:
-		return -INF
-	return (global_transform * (origin + direction * near)).y
 
 
 func _circumradius() -> float:
@@ -672,7 +408,7 @@ func _setup_coin(mesh_instance: MeshInstance3D, collision: CollisionShape3D) -> 
 	cylinder.radius = COIN_RADIUS
 	cylinder.height = COIN_THICKNESS
 	collision.shape = cylinder
-	var text_color := ColorUtils.contrast_color(die_color)
+	var text_color := Color.WHITE
 	for face_up in [true, false]:
 		var label := _make_label("1" if face_up else "2", COIN_RADIUS * 0.9, text_color)
 		var normal := Vector3.UP if face_up else Vector3.DOWN
@@ -684,7 +420,7 @@ func _setup_coin(mesh_instance: MeshInstance3D, collision: CollisionShape3D) -> 
 func _make_face_numeral(face: DieShape.Face, text_color: Color) -> Label3D:
 	var text := _numeral_text(face.value)
 	# Fit two-digit numerals on small faces.
-	var label := _make_label(text, face.inradius * (1.1 if text.length() == 1 else 0.8), text_color)
+	var label := _make_label(text, face.inradius * (1.5 if text.length() == 1 else 1.05), text_color)
 	var up := (shape_data.vertices[face.vertex_indices[0]] - face.center).normalized()
 	label.transform = Transform3D(Basis(up.cross(face.normal), up, face.normal), face.center + face.normal * 0.004)
 	return label
@@ -706,8 +442,11 @@ func _make_label(text: String, text_height: float, text_color: Color) -> Label3D
 	label.font_size = NUMERAL_SIZE
 	label.pixel_size = text_height / NUMERAL_SIZE
 	label.modulate = text_color
-	label.outline_size = 0
+	label.font = _bold_font()
+	label.outline_size = NUMERAL_OUTLINE
+	label.outline_modulate = die_color.darkened(0.55)
 	label.double_sided = false
+	_numerals.append(label)
 	return label
 
 

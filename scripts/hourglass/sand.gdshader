@@ -20,22 +20,28 @@ float hash(vec2 p) {
 void fragment() {
 	vec2 texel = 1.0 / vec2(textureSize(density, 0));
 	float d = texture(density, UV).r;
-	float surface = smoothstep(threshold - 0.04, threshold + 0.04, d);
+	float surface = smoothstep(threshold - 0.06, threshold + 0.06, d);
 	// The slope of the density is the slope of the pile.
-	float dx = texture(density, UV + vec2(texel.x * 3.0, 0.0)).r - texture(density, UV - vec2(texel.x * 3.0, 0.0)).r;
-	float dy = texture(density, UV + vec2(0.0, texel.y * 3.0)).r - texture(density, UV - vec2(0.0, texel.y * 3.0)).r;
+	float dx = texture(density, UV + vec2(texel.x * 5.0, 0.0)).r - texture(density, UV - vec2(texel.x * 5.0, 0.0)).r;
+	float dy = texture(density, UV + vec2(0.0, texel.y * 5.0)).r - texture(density, UV - vec2(0.0, texel.y * 5.0)).r;
 	vec3 normal = normalize(vec3(-dx * 3.0, -dy * 3.0, 1.0));
 	float lit = clamp(dot(normal, normalize(vec3(-0.45, -0.65, 0.75))), 0.0, 1.0);
 	vec2 pixel = floor(UV / texel / 1.6);
 	float speckle = hash(pixel) - 0.5;
 	float grain = hash(floor(UV / texel / 4.0)) - 0.5;
 	float depth = smoothstep(threshold, threshold + 1.1, d);
-	vec3 colour = sand.rgb * (0.84 + 0.40 * lit) * (0.86 + 0.16 * depth);
-	colour *= 1.0 + speckle * 0.16 + grain * 0.10;
-	colour = mix(colour * 0.78, colour, smoothstep(threshold, threshold + 0.35, d));
 	// Nothing is drawn outside the glass.
 	vec2 local = UV * view_size - glass_top;
 	float half_width = texture(widths, vec2((clamp(local.y, 0.0, glass_height) + 0.5) / (glass_height + 1.0), 0.5)).r;
+	// Soft light from the upper left: lighter on the top of the pile, darker down its
+	// flanks and deep inside it, and darker again where it meets the glass.
+	vec3 colour = sand.rgb * (0.80 + 0.46 * lit) * (1.02 - 0.26 * depth);
+	float rim = 1.0 - smoothstep(threshold, threshold + 0.45, d);
+	colour = mix(colour, mix(colour, vec3(1.0), 0.5), rim * 0.32);
+	float wall = smoothstep(half_width - 34.0, half_width - 2.0, abs(local.x));
+	colour *= 1.0 - 0.20 * wall;
+	// Fine grain, kept gentle so the pile reads as one soft surface.
+	colour *= 1.0 + speckle * 0.11 + grain * 0.05;
 	float inside = (1.0 - smoothstep(half_width - 1.5, half_width, abs(local.x))) * step(0.0, local.y) * step(local.y, glass_height);
 	COLOR = vec4(colour, surface * inside);
 }
