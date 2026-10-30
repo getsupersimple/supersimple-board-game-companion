@@ -108,6 +108,11 @@ func open(menu_point: Vector2, finger: Vector2, current_icon: String, current_co
 	_setup_menu(current_theme != "")
 	_colors = Themes.palette(current_theme) if current_theme != "" else COLORS
 	color_drawer.setup_colors(_colors)
+	var icons: Array[String] = Themes.icon_set(current_theme) if current_theme != "" else IconLibrary.GAME_ICONS
+	var identity := {}
+	for icon_name in icons:
+		identity[icon_name] = icon_name
+	icon_drawer.setup(icons, identity)
 	_current_icon = current_icon
 	_current_color = current_color
 	_can_drag = can_drag

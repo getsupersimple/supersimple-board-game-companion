@@ -25,6 +25,40 @@ const PALETTES := {
 ## Which of a palette a new tool starts in, by kind: dice the first, buzzer the third, hourglass the fourth.
 ## Keyed by the saved type numbers of Preset.Type (dice 0, buzzer 3, hourglass 4), which are never reused.
 const NEW_TOOL_COLOR := {0: 0, 3: 2, 4: 3}
+## The icons a tool of each theme can be given, from the edit menu's Icon.
+const ICON_SETS := {
+	"dnd": [
+		"dices", "sword", "shield", "crown", "scroll-text",
+		"flame", "skull", "wand-sparkles", "axe", "bow-arrow",
+		"castle", "gem", "book-open", "bird", "swords",
+		"flask-conical", "key-round", "mountain", "compass", "sparkles",
+	],
+	"futuristic": [
+		"orbit", "cpu", "bot", "scan", "zap",
+		"radar", "satellite", "rocket", "workflow", "circuit-board",
+		"radio-tower", "fingerprint", "scan-eye", "binary", "network",
+		"atom", "hard-drive", "wifi", "brain-circuit", "scan-line",
+	],
+	"traditional": [
+		"landmark", "library", "scale", "key-round", "book-open",
+		"award", "church", "scroll", "feather", "hourglass",
+		"columns-3", "stamp", "building-2", "graduation-cap", "book-marked",
+		"pen-tool", "shield-check", "notebook-pen", "globe", "clock-3",
+	],
+	"old_school": [
+		"gamepad-2", "joystick", "disc-3", "cassette-tape", "trophy",
+		"heart", "monitor", "tv", "music-2", "radio",
+		"headphones", "film", "camera", "save", "terminal",
+		"keyboard", "ghost", "star", "bomb", "alarm-clock",
+	],
+	"standard": [
+		"house", "user-round", "settings", "search", "bell",
+		"circle-check", "palette", "plus", "minus", "menu",
+		"info", "circle-help", "lock", "unlock", "eye",
+		"heart", "star", "filter", "sliders-horizontal", "grid-2x2",
+	],
+}
+
 const SOUND_SETS := {
 	"dnd": "rpg", "futuristic": "futuristic", "traditional": "traditional",
 	"old_school": "future", "standard": "future",
@@ -33,6 +67,12 @@ const SOUND_SETS := {
 
 static func is_known(theme_name: String) -> bool:
 	return NAMES.has(theme_name)
+
+
+static func icon_set(theme_name: String) -> Array[String]:
+	var icons: Array[String] = []
+	icons.assign(ICON_SETS.get(theme_name, ICON_SETS[DEFAULT]))
+	return icons
 
 
 static func palette(theme_name: String) -> Array[Color]:

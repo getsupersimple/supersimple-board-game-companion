@@ -197,12 +197,12 @@ func test_holding_a_tool_opens_the_menu_and_the_icon_can_be_changed_with_the_sam
 	_dock_move(_menu_at(0))
 	var drawer: ChoiceDrawer = _screen._hold_menu.icon_drawer
 	assert_true(drawer.is_open, "the icons pop out")
-	assert_eq(drawer._kinds, IconLibrary.GAME_ICONS, "the same drawer as a game's")
+	assert_eq(drawer._kinds, Themes.icon_set("standard"), "the icons of the tool's theme")
 	var target := drawer.item_rect(7).get_center() + drawer.global_position
 	_dock_move(target)
 	_dock_touch(false, target)
-	assert_eq(_screen.game.presets[1].icon, IconLibrary.GAME_ICONS[7])
-	assert_eq(_screen._dock.chip_for(_screen.game.presets[1].id).preset.icon, IconLibrary.GAME_ICONS[7])
+	assert_eq(_screen.game.presets[1].icon, Themes.icon_set("standard")[7])
+	assert_eq(_screen._dock.chip_for(_screen.game.presets[1].id).preset.icon, Themes.icon_set("standard")[7])
 
 
 func test_letting_go_of_the_long_press_away_from_the_choices_closes_the_menu() -> void:

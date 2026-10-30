@@ -20,5 +20,5 @@ First-order only. Open the listed files, run the listed tests (`-gselect=<file>`
 | Hourglass timing or modes | `hourglass_tool.gd`, `hourglass_sand.gd`, `time_wheel.gd` | `test_hourglass` | Frame counting is forbidden; use the system clock |
 | Look (colours, fonts, shapes) | `theme/app_theme.tres`, `ui_style.gd` | none; check on device | Hardcoded colours in scripts |
 | User-facing text | `translations/strings.csv` then re-import (`Godot --headless --import`) to rebuild `strings.en.translation` | none | |
-| Icons | drop SVG in `assets/icons/lucide/` (white fill), register in `IconLibrary` lists if it should be pickable | none | |
+| Icons | drop SVG in `assets/icons/lucide/` (white stroke), register in `IconLibrary.GAME_ICONS` (games) or `Themes.ICON_SETS` (tools) if it should be pickable | none | |
 | Export / bundle id | `export_presets.cfg`, `project.godot` | none | Deploy steps live in root CLAUDE.md |

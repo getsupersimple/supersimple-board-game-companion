@@ -113,3 +113,13 @@ func test_every_theme_has_a_palette_of_six_and_standard_is_the_default() -> void
 	assert_eq(DiceTool.PALETTE, Themes.STANDARD_PALETTE)
 	assert_eq(Themes.new_tool_color("standard", Preset.Type.HOURGLASS), Color("#EF4444"))
 	assert_eq(Themes.new_tool_color("dnd", Preset.Type.DICE), Color("#742C3B"))
+
+
+func test_every_theme_has_twenty_icons_and_each_has_a_file() -> void:
+	for theme_name in Themes.NAMES:
+		var icons := Themes.icon_set(theme_name)
+		assert_eq(icons.size(), 20, "%s has twenty icons" % theme_name)
+		for icon_name in icons:
+			assert_true(ResourceLoader.exists("res://assets/icons/lucide/%s.svg" % icon_name), "%s: %s" % [theme_name, icon_name])
+	assert_true(Themes.icon_set("dnd").has("sword"))
+	assert_eq(Themes.icon_set("nonsense"), Themes.icon_set("standard"))
