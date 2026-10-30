@@ -588,6 +588,7 @@ func _on_theme_chosen(theme_name: String) -> void:
 	var preset := game.find_preset(_held_preset_id)
 	if preset == null:
 		return
+	_recolor_dice(preset, preset.theme, theme_name)
 	preset.theme = theme_name
 	store.preset_changed()
 	# The tool offers its theme's colours, so a tool of another theme is built again.
@@ -597,6 +598,16 @@ func _on_theme_chosen(theme_name: String) -> void:
 		_forget(preset.id)
 		_show_active_preset()
 	SoundBank.play_once(self, "chain")
+
+
+## A dice tool changing theme takes its dice's colours along: each becomes the same place in the new
+## palette.
+func _recolor_dice(preset: Preset, from_theme: String, to_theme: String) -> void:
+	var old_palette := Themes.palette(from_theme)
+	var new_palette := Themes.palette(to_theme)
+	for entry in preset.data.get("dice", []):
+		if entry is Dictionary and entry.get("color") is Color:
+			entry["color"] = new_palette[Themes.nearest_index(old_palette, entry["color"])]
 
 
 func _on_color_chosen(color: Color) -> void:

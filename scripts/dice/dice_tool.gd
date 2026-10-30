@@ -335,6 +335,9 @@ func _load_saved_dice() -> void:
 		var color: Variant = entry.get("color", _palette[0])
 		if not color is Color:
 			color = _palette[0]
+		# A colour from before palettes, or from another theme, becomes the nearest of this theme's.
+		color = _palette[Themes.nearest_index(_palette, color)]
+		entry["color"] = color
 		if sides == PERCENTILE:
 			_table.add_percentile(color)
 			_update_results(_values)

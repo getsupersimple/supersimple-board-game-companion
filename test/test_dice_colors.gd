@@ -389,3 +389,12 @@ func test_a_die_is_only_picked_up_by_a_long_press_and_a_finger_that_moves_first_
 	await wait_seconds(DiceTool.LONG_PRESS_SECONDS + 0.2)
 	assert_true(tool._table.is_dragging() or tool._die_drawer.is_open, "kept still, the die is picked up")
 	_finger_at_table(tool, false, at)
+
+
+func test_dice_saved_in_colours_from_before_palettes_become_the_nearest_of_the_palette() -> void:
+	var tool := _tool([{"sides": 6, "color": Color("#4F7CFF")}, {"sides": 6, "color": Color("#F5A524")}])
+	await wait_seconds(0.5)
+	for die in tool._table.dice:
+		assert_true(tool._palette.has(die.die_color), "a palette colour")
+	assert_eq(tool._table.dice[0].die_color, Themes.palette("standard")[0])
+	assert_eq(tool._table.dice[1].die_color, Themes.palette("standard")[2])

@@ -461,3 +461,17 @@ func test_deleting_the_first_tool_slides_in_the_one_that_takes_its_place() -> vo
 	_screen._on_delete_requested(first)
 	assert_eq(_screen.active_preset_id, next)
 	assert_gt(_screen._tool.position.x, 0.0, "from the right, as there is nothing on the left")
+
+
+func test_changing_a_dice_tools_theme_recolours_its_dice_into_the_new_palette() -> void:
+	await wait_seconds(0.4)
+	var dice_preset: Preset = _screen.game.presets[0]
+	dice_preset.data["dice"] = [{"sides": 6, "color": Themes.palette("standard")[1]}, {"sides": 8, "color": Themes.palette("standard")[4]}]
+	_screen._held_preset_id = dice_preset.id
+	_screen._on_theme_chosen("dnd")
+	await wait_seconds(0.5)
+	assert_eq(dice_preset.data["dice"][0]["color"], Themes.palette("dnd")[1])
+	assert_eq(dice_preset.data["dice"][1]["color"], Themes.palette("dnd")[4])
+	var tool: DiceTool = _screen._tool
+	await wait_seconds(0.5)
+	assert_eq(tool._table.dice[0].die_color, Themes.palette("dnd")[1], "and the dice on the table wear them")

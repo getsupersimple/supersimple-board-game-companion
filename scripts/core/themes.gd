@@ -75,6 +75,18 @@ static func icon_set(theme_name: String) -> Array[String]:
 	return icons
 
 
+## Which colour of a palette is closest to `color` (the colour itself if it is in it).
+static func nearest_index(colors: Array[Color], color: Color) -> int:
+	var best := 0
+	var best_distance := INF
+	for i in colors.size():
+		var distance := Vector3(colors[i].r - color.r, colors[i].g - color.g, colors[i].b - color.b).length_squared()
+		if distance < best_distance:
+			best_distance = distance
+			best = i
+	return best
+
+
 static func palette(theme_name: String) -> Array[Color]:
 	var colors: Array[Color] = []
 	colors.assign(PALETTES.get(theme_name, STANDARD_PALETTE))
