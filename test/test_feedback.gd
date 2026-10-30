@@ -160,7 +160,7 @@ func test_a_swipe_across_the_buzzer_does_not_make_it_buzz() -> void:
 	assert_false(tool._player.playing)
 
 
-func test_a_swipe_that_starts_while_it_buzzes_cuts_it_off() -> void:
+func test_a_finger_that_moves_while_it_buzzes_changes_nothing_and_cannot_swipe_until_it_lifts() -> void:
 	var tool := BuzzerTool.new()
 	tool.preset = Preset.create_default(Preset.Type.BUZZER)
 	tool.store = PresetStore.new("user://test_buzzer.cfg")
@@ -172,7 +172,29 @@ func test_a_swipe_that_starts_while_it_buzzes_cuts_it_off() -> void:
 	var move := InputEventMouseMotion.new()
 	move.global_position = tool._press_point + Vector2(0, 80)
 	tool._input(move)
+	assert_true(tool._player.playing, "still sounding")
+	assert_false(tool.accepts_swipe(), "no swipe while it sounds under the finger")
+	tool._on_released()
 	assert_false(tool._player.playing)
+	assert_true(tool.accepts_swipe(), "and a new touch can swipe again")
+
+
+func test_sliding_over_the_sounds_in_the_drawer_plays_each_one_as_a_preview() -> void:
+	var tool := BuzzerTool.new()
+	tool.preset = Preset.create_default(Preset.Type.BUZZER)
+	tool.store = PresetStore.new("user://test_buzzer.cfg")
+	add_child_autofree(tool)
+	await wait_physics_frames(2)
+	tool._on_pressed()
+	await wait_seconds(BuzzerTool.START_DELAY + 0.05)
+	tool._preview("siren")
+	assert_eq(tool._player.stream, SoundBank.sustained("siren"))
+	assert_true(tool._player.playing)
+	tool._preview("ding")
+	assert_eq(tool._player.stream, SoundBank.stream("ding"))
+	tool._preview("")
+	assert_eq(tool._player.stream, SoundBank.stream("ding"), "over none, the last one carries on")
+	tool._on_released()
 
 
 func test_a_quick_tap_still_sounds_briefly() -> void:

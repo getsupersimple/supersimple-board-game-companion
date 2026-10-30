@@ -8,7 +8,7 @@ One line per thing. Status: `verified` = checked against source on 2026-10-28. O
 - **Preset** (tool) `core/preset.gd`: type, icon, colour, `data`, optional screen `position` (fractions). verified
 - **PresetStore** `core/preset_store.gd`: all games, every mutation autosaves; Quick always first. Tools call `preset_changed()` after editing `data`. verified
 - **AppSettings** `core/app_settings.gd`: static global switches; `sound_theme` is the sound set in use now (set from the tool on show, not saved). verified
-- **Themes** `core/themes.gd`: tool theme names → icon + sound set; `Preset.theme` holds one. verified
+- **Themes** `core/themes.gd`: tool theme names → icon + sound set + six-colour palette; `Preset.theme` holds one. verified
 - **IconLibrary** `core/icon_library.gd`: icon name → SVG in `assets/icons/lucide/` (white, tinted at use). verified
 - **SoundBank** `core/sound_bank.gd`: all sounds, synthesised in code or from `assets/sounds/rpg/`; `play_once`, `stream`, `sustained`. verified
 - **ColorUtils**, **Ids** `core/`: contrast colour; unique ids. verified

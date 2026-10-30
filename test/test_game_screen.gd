@@ -228,6 +228,15 @@ func test_a_tool_can_be_given_another_theme_from_the_menu() -> void:
 	assert_eq(AppSettings.sound_theme, "rpg", "the tool on show makes the sounds of its theme")
 
 
+func test_a_tool_added_with_a_theme_starts_in_its_colour_and_the_menu_offers_its_palette() -> void:
+	await wait_seconds(0.3)
+	_screen._on_type_picked(Preset.Type.BUZZER, "futuristic")
+	var added: Preset = _screen.game.presets[_screen.game.presets.size() - 1]
+	assert_eq(added.color, Themes.palette("futuristic")[2])
+	_screen._on_dock_held(added.id, Vector2(100, 100))
+	assert_eq(_screen._hold_menu.color_drawer._swatches, Themes.palette("futuristic"))
+
+
 func test_each_tool_on_show_sets_the_sounds_of_its_own_theme() -> void:
 	await wait_seconds(0.3)
 	_screen.game.presets[1].theme = "dnd"
@@ -290,7 +299,7 @@ func test_a_tool_can_be_given_another_colour_from_the_menu() -> void:
 	var target := drawer.item_rect(2).get_center() + drawer.global_position
 	_dock_move(target)
 	_dock_touch(false, target)
-	assert_eq(_screen.game.presets[1].color, HoldMenu.COLORS[2])
+	assert_eq(_screen.game.presets[1].color, Themes.palette("standard")[2])
 
 
 func test_delete_in_the_menu_removes_the_tool() -> void:

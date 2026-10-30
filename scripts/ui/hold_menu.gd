@@ -48,6 +48,8 @@ var _can_drag := false
 var _current_icon := ""
 var _current_color := Color.WHITE
 var _current_theme := ""
+## The colours on offer: the theme's for a tool, the general ones for a game.
+var _colors: Array[Color] = COLORS
 var _down := false
 
 
@@ -75,7 +77,7 @@ func _ready() -> void:
 	color_drawer = ChoiceDrawer.new()
 	color_drawer.modal = false
 	color_drawer.setup_colors(COLORS)
-	color_drawer.picked.connect(func(kind: String) -> void: _finish(); color_chosen.emit(COLORS[int(kind)]))
+	color_drawer.picked.connect(func(kind: String) -> void: _finish(); color_chosen.emit(_colors[int(kind)]))
 	add_child(color_drawer)
 
 	theme_drawer = ChoiceDrawer.new()
@@ -104,6 +106,8 @@ func _setup_menu(with_theme: bool) -> void:
 func open(menu_point: Vector2, finger: Vector2, current_icon: String, current_color: Color, can_delete: bool, can_drag: bool, current_theme: String = "") -> void:
 	_current_theme = current_theme
 	_setup_menu(current_theme != "")
+	_colors = Themes.palette(current_theme) if current_theme != "" else COLORS
+	color_drawer.setup_colors(_colors)
 	_current_icon = current_icon
 	_current_color = current_color
 	_can_drag = can_drag
@@ -215,7 +219,7 @@ func _on_menu_hovered(kind: String) -> void:
 		"icon":
 			_pop_out(icon_drawer, _current_icon)
 		"color":
-			_pop_out(color_drawer, str(color_index(_current_color)))
+			_pop_out(color_drawer, str(color_index(_current_color, _colors)))
 		"theme":
 			_pop_out(theme_drawer, _current_theme)
 		"":
@@ -229,7 +233,7 @@ func _on_menu_picked(kind: String) -> void:
 		"icon":
 			_pop_out(icon_drawer, _current_icon)
 		"color":
-			_pop_out(color_drawer, str(color_index(_current_color)))
+			_pop_out(color_drawer, str(color_index(_current_color, _colors)))
 		"theme":
 			_pop_out(theme_drawer, _current_theme)
 		"delete":
@@ -257,8 +261,8 @@ func _finish() -> void:
 	close()
 
 
-static func color_index(color: Color) -> int:
-	for i in COLORS.size():
-		if COLORS[i].is_equal_approx(color):
+static func color_index(color: Color, palette: Array[Color] = COLORS) -> int:
+	for i in palette.size():
+		if palette[i].is_equal_approx(color):
 			return i
 	return -1

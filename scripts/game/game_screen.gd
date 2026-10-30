@@ -325,6 +325,8 @@ func _input(event: InputEvent) -> void:
 				_tracking = false
 				return
 			_swiping = true
+			if _tool.has_method("cancel_press"):
+				_tool.cancel_press()
 		var now := Time.get_ticks_msec()
 		var seconds := maxf((now - _swipe_msec) / 1000.0, 0.001)
 		_swipe_velocity = lerpf(_swipe_velocity, event.relative.x / seconds, 0.5)
@@ -483,6 +485,7 @@ func _to_picker(button_point: Vector2) -> Vector2:
 func _on_type_picked(preset_type: Preset.Type, theme_name: String) -> void:
 	var preset := Preset.create_default(preset_type)
 	preset.theme = theme_name
+	preset.color = Themes.new_tool_color(theme_name, preset_type)
 	store.add_preset(game.id, preset)
 	active_preset_id = preset.id
 	_dock.sync(game.presets, active_preset_id)
@@ -587,8 +590,12 @@ func _on_theme_chosen(theme_name: String) -> void:
 		return
 	preset.theme = theme_name
 	store.preset_changed()
+	# The tool offers its theme's colours, so a tool of another theme is built again.
+	_forget(preset.id)
 	if preset.id == active_preset_id:
-		_apply_theme(preset)
+		_drop_tool()
+		_forget(preset.id)
+		_show_active_preset()
 	SoundBank.play_once(self, "chain")
 
 

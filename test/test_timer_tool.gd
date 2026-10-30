@@ -95,8 +95,8 @@ func test_the_digital_menu_has_no_gravity_and_colours_the_numbers() -> void:
 	var swatch: Vector2 = tool._digits_drawer.item_rect(2).get_center()
 	tool._digits_drawer.pointer_move(swatch)
 	tool._release_menu(swatch)
-	assert_eq(tool.preset.data["digits"], HourglassTool.DIGIT_COLORS[2])
-	assert_eq(tool._digital.digit_color, HourglassTool.DIGIT_COLORS[2])
+	assert_eq(tool.preset.data["digits"], Themes.palette(tool.preset.theme)[2])
+	assert_eq(tool._digital.digit_color, Themes.palette(tool.preset.theme)[2])
 	assert_false(tool._menu.is_open)
 	assert_false(tool._digits_drawer.is_open)
 
@@ -229,8 +229,8 @@ func test_the_glass_ends_wear_the_tools_colour_and_the_sand_its_own() -> void:
 	tool._open_menu(Vector2(500, 900))
 	assert_eq(tool._menu._kinds, ["gravity", "color", "sound"])
 	tool._choose_sand_color("3")
-	assert_eq(tool.preset.data["sand"], HoldMenu.COLORS[3])
-	assert_eq(tool._sand_color(), HoldMenu.COLORS[3])
+	assert_eq(tool.preset.data["sand"], Themes.palette(tool.preset.theme)[3])
+	assert_eq(tool._sand_color(), Themes.palette(tool.preset.theme)[3])
 	assert_eq(tool._sand.cap_color, tool.preset.color, "the ends stay put")
 
 

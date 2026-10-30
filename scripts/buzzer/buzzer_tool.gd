@@ -52,6 +52,7 @@ func _ready() -> void:
 	_drawer = ChoiceDrawer.new()
 	_drawer.setup(SoundBank.BUZZER_SOUNDS, SoundBank.BUZZER_ICONS)
 	_drawer.picked.connect(_choose)
+	_drawer.hovered.connect(_preview)
 	add_child(_drawer)
 
 	_player = AudioStreamPlayer.new()
@@ -95,12 +96,25 @@ func _start_sound() -> void:
 	if _started:
 		return
 	_started = true
-	var held := SoundBank.sustained(_sound)
-	_player.stream = held if held != null else SoundBank.stream(_sound)
-	_player.play()
+	_play(_sound)
 	_buzzing = true
 	_buzz()
 	_area.self_modulate = Color(1, 1, 1, 0.55)
+
+
+## Starts a sound going in the player, in place of any that is: held for as long as the finger is
+## down if it can be, otherwise once.
+func _play(kind: String) -> void:
+	var held := SoundBank.sustained(kind)
+	_player.stream = held if held != null else SoundBank.stream(kind)
+	_player.play()
+
+
+## With the drawer out and the finger sliding over its choices, each one sounds as it is reached, so
+## it can be heard before it is picked. The sound that was playing carries on if the finger is over none.
+func _preview(kind: String) -> void:
+	if kind != "" and _started:
+		_play(kind)
 
 
 func _stop_sound() -> void:
@@ -110,10 +124,10 @@ func _stop_sound() -> void:
 	_area.self_modulate = Color.WHITE
 
 
-## A finger that moves off before the buzzer has begun, or while it sounds, has swiped: nothing
-## sounds, and the swipe is left for the screen to take.
+## A finger that moves off before the buzzer has begun has swiped: nothing sounds, and the swipe is
+## left for the screen to take. Once it sounds, the finger moving does nothing until it lifts.
 func _input(event: InputEvent) -> void:
-	if not _fingered or _swiped or _holding_for_drawer or not event is InputEventMouseMotion:
+	if not _fingered or _swiped or _started or _holding_for_drawer or not event is InputEventMouseMotion:
 		return
 	if event.global_position.distance_to(_press_point) > SWIPE_CANCEL:
 		_swiped = true
@@ -172,9 +186,10 @@ func cancel_press() -> void:
 	_stop_sound()
 
 
-## A swipe across the buzzer goes to another tool, unless its drawer is out.
+## A swipe across the buzzer goes to another tool, unless its drawer is out or it is already
+## sounding under a finger: that finger has to lift, and swipe again.
 func accepts_swipe() -> bool:
-	return not _holding_for_drawer and not _drawer.is_open
+	return not _holding_for_drawer and not _drawer.is_open and not (_started and _fingered)
 
 
 func _exit_tree() -> void:

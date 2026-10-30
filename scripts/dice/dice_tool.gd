@@ -9,10 +9,8 @@ extends Control
 const MAX_DICE := 16
 const DIE_KINDS: Array[int] = [2, 4, 6, 8, 10, 12, 20, 100]
 const PERCENTILE := 100
-const PALETTE: Array[Color] = [
-	Color("#4F7CFF"), Color("#E5484D"), Color("#30A46C"),
-	Color("#F5A524"), Color("#8E4EC6"), Color("#1C1C1E"),
-]
+## The colours of the standard theme; a dice tool offers its own theme's (see `_palette`).
+const PALETTE: Array[Color] = Themes.STANDARD_PALETTE
 ## Holding a die in the top row, or the + button, this long is a long press.
 const LONG_PRESS_SECONDS := 0.45
 const TOP_ICON_SIZE := 72
@@ -26,6 +24,10 @@ const TAP_SLOP := 24.0
 ## Every colour's tally is at most this wide, so they line up whatever the number.
 const TOTAL_WIDTH := 170.0
 const SCORE_GAP := 8.0
+## A die has to lie still this long, in seconds, before its pill grows.
+const SCORE_SETTLE := 0.3
+## A die that has started moving has to keep at it this long before its pill shrinks away.
+const SCORE_MOVE_GRACE := 0.1
 const SCORE_FONT := 56
 const THROW_DISTANCE := 90.0
 const THROW_MIN_SPEED := 6.0
@@ -38,10 +40,22 @@ var _table: DiceTable
 var _container: SubViewportContainer
 var _totals: HBoxContainer
 var _values: Array = []
+## The colours dice can be, from the tool's theme.
+var _palette: Array[Color] = PALETTE
 var _shown_totals := {}
 ## Over the table: beside each die that has settled, a pill with what it shows.
 var _score_layer: Control
 var _scores := {}
+var _pops := {}
+## How long each die has shown a number lying still, and how long it has been moving since.
+var _settled_for := {}
+var _moving_for := {}
+## Touching a total at the top shows only the dice of its colour; null shows them all.
+var _only_color: Variant = null
+var _only_since := 0
+## Counts presses that landed on a die and may become a long press, which picks the die up.
+var _die_press := 0
+var _last_point := Vector2.ZERO
 ## Counts presses on the top row. Non-zero while a press may still become a tap or a
 ## long press; the first of release and timeout takes it.
 var _color_drawer: ChoiceDrawer
@@ -63,6 +77,7 @@ var _hold_msec := 0
 
 
 func _ready() -> void:
+	_palette = Themes.palette(preset.theme)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var column := VBoxContainer.new()
 	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -109,14 +124,20 @@ func _ready() -> void:
 func _on_table_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			var on_a_die := _table.begin_touch(event.position)
+			var on_a_die := _table.is_die_at(event.position)
 			_tap_start = event.position
+			_last_point = event.position
 			_tap_msec = Time.get_ticks_msec()
-			if not on_a_die:
+			if on_a_die:
+				# A die is only picked up by a long press; a finger that moves sooner is swiping.
+				_die_press += 1
+				get_tree().create_timer(LONG_PRESS_SECONDS).timeout.connect(_on_die_long_press.bind(_die_press))
+			else:
 				_surface_press += 1
 				get_tree().create_timer(LONG_PRESS_SECONDS).timeout.connect(_on_surface_held.bind(_surface_press, event.position))
 		else:
 			_surface_press = 0
+			_die_press = 0
 			_table.press_down(false)
 			_table.end_touch()
 			if _held_menu != null:
@@ -131,8 +152,10 @@ func _on_table_input(event: InputEvent) -> void:
 		if _held_menu != null:
 			_move_menu(event.position)
 		else:
+			_last_point = event.position
 			if event.position.distance_to(_tap_start) > TAP_SLOP:
 				_surface_press = 0
+				_die_press = 0
 			_table.move_touch(event.position)
 
 
@@ -181,6 +204,16 @@ func _lock_by_default() -> void:
 		_on_die_choice("lock")
 
 
+## A finger has kept still on a die: the die is picked up, and follows the finger if it moves; if
+## it stays put a while longer the die's own menu opens.
+func _on_die_long_press(press_id: int) -> void:
+	if _die_press != press_id:
+		return
+	_die_press = 0
+	if _table.begin_touch(_last_point):
+		Haptics.pulse(20)
+
+
 func _on_surface_held(press_id: int, point: Vector2) -> void:
 	if _surface_press != press_id:
 		return
@@ -212,8 +245,10 @@ func _on_die_held(die: Die, view_position: Vector2) -> void:
 
 ## While the drawer is open the die falls to the table, so whether it can be locked is
 ## looked at again each frame, and Lock dims or lights as it lands.
-func _process(_delta: float) -> void:
-	_place_scores()
+func _process(delta: float) -> void:
+	_place_scores(delta)
+	if _only_color != null and Time.get_ticks_msec() - _only_since > 150 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_show_only(null)
 	if _die_drawer == null or not _die_drawer.is_open or _menu_die == null or not is_instance_valid(_menu_die):
 		return
 	_die_drawer.set_disabled(_cannot_lock(_menu_die))
@@ -297,9 +332,9 @@ func _load_saved_dice() -> void:
 		if not entry is Dictionary:
 			continue
 		var sides := int(entry.get("sides", 0))
-		var color: Variant = entry.get("color", PALETTE[0])
+		var color: Variant = entry.get("color", _palette[0])
 		if not color is Color:
-			color = PALETTE[0]
+			color = _palette[0]
 		if sides == PERCENTILE:
 			_table.add_percentile(color)
 			_update_results(_values)
@@ -319,11 +354,11 @@ func _build_plus_button() -> void:
 	_plus.gui_input.connect(_on_plus_input)
 	add_child(_plus)
 	_drawer = DiceDrawer.new()
-	_drawer.setup(DIE_KINDS, PALETTE)
+	_drawer.setup(DIE_KINDS, _palette)
 	_drawer.picked.connect(_add_die)
 	add_child(_drawer)
 	_color_drawer = ChoiceDrawer.new()
-	_color_drawer.setup_colors(PALETTE)
+	_color_drawer.setup_colors(_palette)
 	_color_drawer.picked.connect(_on_color_picked)
 	_color_drawer.closed.connect(_on_colors_closed)
 	add_child(_color_drawer)
@@ -358,6 +393,7 @@ func accepts_swipe() -> bool:
 ## A swipe has taken the finger: a press that is still waiting to become a long press is dropped.
 func cancel_press() -> void:
 	_surface_press = 0
+	_die_press = 0
 
 
 ## Tapping the tool's icon in the toolbar while it is showing rolls the dice again.
@@ -398,7 +434,7 @@ func _add_die(sides: int, color: Variant) -> void:
 	var needed := 2 if sides == PERCENTILE else 1
 	if _table.dice.size() + needed > MAX_DICE:
 		return
-	var paint: Color = color if color is Color else PALETTE.pick_random()
+	var paint: Color = color if color is Color else _palette.pick_random()
 	if sides == PERCENTILE:
 		_table.add_percentile(paint)
 		_update_results(_values)
@@ -408,8 +444,8 @@ func _add_die(sides: int, color: Variant) -> void:
 
 
 func _palette_index(color: Color) -> int:
-	for i in PALETTE.size():
-		if PALETTE[i].is_equal_approx(color):
+	for i in _palette.size():
+		if _palette[i].is_equal_approx(color):
 			return i
 	return -1
 
@@ -417,7 +453,7 @@ func _palette_index(color: Color) -> int:
 ## A colour was picked in the drawer: the die is painted, both halves of a percentile pair.
 func _on_color_picked(kind: String) -> void:
 	if _colors_for != null and _table.dice.has(_colors_for):
-		_on_color_chosen(_colors_for, PALETTE[int(kind)])
+		_on_color_chosen(_colors_for, _palette[int(kind)])
 
 
 ## Keeps a die, and its other half, perfectly still while it is being dealt with.
@@ -468,29 +504,42 @@ func _update_results(values: Array) -> void:
 	_show_totals(totals)
 
 
-## Beside each die that lies flat and still, a pill in its colour with the number it shows. A
-## percentile pair reads as one number, beside its tens die.
-func _place_scores() -> void:
+## Beside each die that has lain flat and still for a moment, a pill in its colour with the number it
+## shows, growing out with a spring. It shrinks away again when the die moves. A percentile pair
+## reads as one number, beside its tens die.
+func _place_scores(delta: float) -> void:
 	if _score_layer == null or _table.camera == null:
 		return
-	var seen := {}
+	var wanted := {}
 	for die in _table.dice:
 		if die.numeral_style == Die.NumeralStyle.UNITS:
 			continue
 		var value := _score_of(die)
-		if value < 0 or not die.is_at_rest():
-			continue
-		seen[die] = true
+		var still := value >= 0 and die.is_at_rest()
+		if still:
+			_moving_for.erase(die)
+			_settled_for[die] = float(_settled_for.get(die, 0.0)) + delta
+		else:
+			_moving_for[die] = float(_moving_for.get(die, 0.0)) + delta
+			if float(_moving_for[die]) >= SCORE_MOVE_GRACE:
+				_settled_for.erase(die)
+		var shown: bool = float(_settled_for.get(die, 0.0)) >= SCORE_SETTLE and value >= 0 and _matches_filter(die)
+		if shown:
+			wanted[die] = value
+	for die in wanted:
 		var pill: PanelContainer = _scores.get(die)
 		if pill == null:
 			pill = _make_score_pill(die)
 			_scores[die] = pill
 			_score_layer.add_child(pill)
+			_pops[die] = Spring.new(0.0)
+			_pops[die].stiffness = 420.0
+			_pops[die].damping = 22.0
 		if pill.get_meta("color") != die.die_color:
 			pill.set_meta("color", die.die_color)
 			pill.add_theme_stylebox_override("panel", _pill_box(die.die_color))
 		var label := pill.get_child(0) as Label
-		label.text = str(value)
+		label.text = str(wanted[die])
 		pill.reset_size()
 		var centre := _table.camera.unproject_position(die.global_position)
 		var reach_px := _table.camera.unproject_position(die.global_position + Vector3(die.reach(), 0.0, 0.0)).x - centre.x
@@ -498,12 +547,35 @@ func _place_scores() -> void:
 		if at.x + pill.size.x > _score_layer.size.x:
 			at.x = centre.x - reach_px - SCORE_GAP - pill.size.x
 		pill.position = at
+		_pops[die].target = 1.0
 	for die in _scores.keys():
-		if not seen.has(die):
-			var gone: Control = _scores[die]
-			_scores.erase(die)
-			if is_instance_valid(gone):
-				gone.queue_free()
+		var pill: Control = _scores[die]
+		var spring: Spring = _pops[die]
+		if not is_instance_valid(die):
+			_forget_score(die)
+			continue
+		if not wanted.has(die):
+			spring.target = 0.0
+		spring.step(delta)
+		var grown := maxf(float(spring.value), 0.0)
+		pill.pivot_offset = pill.size / 2.0
+		pill.scale = Vector2(grown, grown)
+		if not wanted.has(die) and grown < 0.02:
+			_forget_score(die)
+	for die in _settled_for.keys():
+		if not is_instance_valid(die):
+			_settled_for.erase(die)
+			_moving_for.erase(die)
+
+
+func _forget_score(die: Variant) -> void:
+	var gone: Control = _scores.get(die)
+	_scores.erase(die)
+	_pops.erase(die)
+	_settled_for.erase(die)
+	_moving_for.erase(die)
+	if is_instance_valid(gone):
+		gone.queue_free()
 
 
 ## What a die shows: -1 while it is not lying flat; a percentile's tens die reads the whole pair.
@@ -560,6 +632,8 @@ func _show_totals(totals: Dictionary) -> void:
 		box.content_margin_right = 8.0
 		pill.add_theme_stylebox_override("panel", box if many else StyleBoxEmpty.new())
 		pill.custom_minimum_size.x = width if many else 0.0
+		pill.mouse_filter = Control.MOUSE_FILTER_STOP
+		pill.gui_input.connect(_on_total_input.bind(color))
 		var label := Label.new()
 		label.text = str(totals[color]) if totals[color] >= 0 else "?"
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -568,6 +642,25 @@ func _show_totals(totals: Dictionary) -> void:
 			label.add_theme_color_override("font_color", Color.WHITE)
 		pill.add_child(label)
 		_totals.add_child(pill)
+
+
+## Pressing a total shows only the dice of its colour for as long as the finger stays down.
+func _on_total_input(event: InputEvent, color: Color) -> void:
+	if not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	_show_only(color if event.pressed else null)
+
+
+## Shows only the dice of a colour (and their pills), or all of them for null.
+func _show_only(color: Variant) -> void:
+	_only_color = color
+	_only_since = Time.get_ticks_msec()
+	for die in _table.dice:
+		die.visible = _matches_filter(die)
+
+
+func _matches_filter(die: Die) -> bool:
+	return _only_color == null or die.die_color == _only_color
 
 
 func _save() -> void:

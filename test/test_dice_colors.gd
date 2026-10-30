@@ -288,3 +288,104 @@ func test_a_single_die_unlocked_stays_free_for_a_second_even_with_auto_lock_on()
 	assert_false(die.locked, "still free just after")
 	await wait_seconds(2.0)
 	assert_true(die.locked, "and locked again afterwards")
+
+
+func test_a_dice_tool_offers_the_colours_of_its_theme() -> void:
+	var preset := Preset.create_default(Preset.Type.DICE)
+	preset.theme = "dnd"
+	var tool := DiceTool.new()
+	tool.preset = preset
+	tool.store = PresetStore.new("user://test_dice_colors.cfg")
+	tool.size = Vector2(900, 1500)
+	add_child_autofree(tool)
+	await wait_seconds(0.3)
+	assert_eq(tool._palette, Themes.palette("dnd"))
+	tool._add_die(6, null)
+	assert_true(Themes.palette("dnd").has(tool._table.dice[0].die_color), "a random die is one of the theme's colours")
+
+
+func test_a_pill_waits_for_the_die_to_lie_still_for_300_ms_and_then_grows_out_with_a_spring() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}])
+	await wait_seconds(3.0)
+	tool.set_process(false)
+	var die: Die = tool._table.dice[0]
+	assert_true(die.is_at_rest())
+	for gone in tool._scores.values():
+		gone.queue_free()
+	tool._scores.clear()
+	tool._pops.clear()
+	tool._settled_for.clear()
+	tool._place_scores(0.15)
+	assert_eq(tool._scores.size(), 0, "not yet: it has only been still for 150 ms")
+	tool._place_scores(0.1)
+	assert_eq(tool._scores.size(), 0, "250 ms is not enough either")
+	tool._place_scores(0.1)
+	assert_eq(tool._scores.size(), 1, "300 ms is")
+	var pill: Control = tool._scores[die]
+	assert_lt(pill.scale.x, 0.9, "it starts small")
+	var biggest := 0.0
+	for i in 40:
+		tool._place_scores(0.03)
+		biggest = maxf(biggest, pill.scale.x)
+	assert_gt(biggest, 1.0, "it overshoots a little, like the other animations")
+	assert_almost_eq(pill.scale.x, 1.0, 0.03)
+
+
+func test_a_pill_shrinks_away_when_its_die_moves_and_does_not_blink() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}])
+	await wait_seconds(3.0)
+	tool.set_process(false)
+	var die: Die = tool._table.dice[0]
+	for i in 40:
+		tool._place_scores(0.03)
+	assert_eq(tool._scores.size(), 1)
+	# A moment of jitter does not take it away.
+	tool._moving_for[die] = 0.05
+	tool._place_scores(0.01)
+	assert_almost_eq((tool._scores[die] as Control).scale.x, 1.0, 0.05)
+	die.linear_velocity = Vector3(5, 0, 0)
+	for i in 3:
+		tool._place_scores(0.05)
+	assert_true(tool._scores.has(die), "still on its way out")
+	assert_lt((tool._scores[die] as Control).scale.x, 0.95, "shrinking")
+	for i in 40:
+		tool._place_scores(0.05)
+	assert_eq(tool._scores.size(), 0, "gone once it has shrunk")
+
+
+func test_pressing_a_total_shows_only_the_dice_of_that_colour_until_the_finger_lifts() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}, {"sides": 8, "color": DiceTool.PALETTE[1]}, {"sides": 6, "color": DiceTool.PALETTE[0]}])
+	await wait_seconds(3.0)
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	tool._on_total_input(press, DiceTool.PALETTE[1])
+	for die in tool._table.dice:
+		assert_eq(die.visible, die.die_color == DiceTool.PALETTE[1], "only the matching colour shows")
+	var lift := InputEventMouseButton.new()
+	lift.button_index = MOUSE_BUTTON_LEFT
+	lift.pressed = false
+	tool._on_total_input(lift, DiceTool.PALETTE[1])
+	for die in tool._table.dice:
+		assert_true(die.visible, "all back")
+
+
+func test_a_die_is_only_picked_up_by_a_long_press_and_a_finger_that_moves_first_is_swiping() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}])
+	await wait_seconds(3.0)
+	var die: Die = tool._table.dice[0]
+	var at := tool._table.camera.unproject_position(die.global_position)
+	_finger_at_table(tool, true, at)
+	assert_false(tool._table.is_dragging(), "a touch alone does not pick it up")
+	var move := InputEventMouseMotion.new()
+	move.position = at + Vector2(80, 0)
+	move.button_mask = MOUSE_BUTTON_MASK_LEFT
+	tool._on_table_input(move)
+	await wait_seconds(DiceTool.LONG_PRESS_SECONDS + 0.2)
+	assert_false(tool._table.is_dragging(), "moving first made it a swipe, so the long press never comes")
+	assert_true(tool.accepts_swipe())
+	_finger_at_table(tool, false, at + Vector2(80, 0))
+	_finger_at_table(tool, true, at)
+	await wait_seconds(DiceTool.LONG_PRESS_SECONDS + 0.2)
+	assert_true(tool._table.is_dragging() or tool._die_drawer.is_open, "kept still, the die is picked up")
+	_finger_at_table(tool, false, at)

@@ -229,12 +229,8 @@ func jump_all() -> void:
 ## Puts a finger down on the die under a point of the view. Returns true on a
 ## hit. The die then follows the finger until `end_touch`.
 func begin_touch(view_position: Vector2) -> bool:
-	var camera := get_viewport().get_camera_3d()
-	var from := camera.project_ray_origin(view_position)
-	var to := from + camera.project_ray_normal(view_position) * 100.0
-	var query := PhysicsRayQueryParameters3D.create(from, to, Die.DICE_LAYER)
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty() or not hit["collider"] is Die:
+	var hit := _die_hit(view_position)
+	if hit.is_empty():
 		return false
 	_grabbed = hit["collider"]
 	_grabbed.sleeping = false
@@ -245,6 +241,20 @@ func begin_touch(view_position: Vector2) -> bool:
 	_grab_time = 0.0
 	_grab_view = view_position
 	return true
+
+
+## Whether a die is under a point of the view, without picking it up.
+func is_die_at(view_position: Vector2) -> bool:
+	return not _die_hit(view_position).is_empty()
+
+
+func _die_hit(view_position: Vector2) -> Dictionary:
+	var camera := get_viewport().get_camera_3d()
+	var from := camera.project_ray_origin(view_position)
+	var to := from + camera.project_ray_normal(view_position) * 100.0
+	var query := PhysicsRayQueryParameters3D.create(from, to, Die.DICE_LAYER)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return hit if not hit.is_empty() and hit["collider"] is Die else {}
 
 
 ## Moves the finger. The touched point is pulled towards it.

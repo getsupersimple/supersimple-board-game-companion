@@ -33,10 +33,8 @@ const TOP_ICON_SIZE := 72
 ## digital timer the colour of its numbers; both have the sound.
 const DIGITAL_CHOICES: Array[String] = ["color", "sound"]
 const SAND_CHOICES: Array[String] = ["gravity", "color", "sound"]
-const DIGIT_COLORS: Array[Color] = [
-	Color("#F2F2F2"), Color("#E5484D"), Color("#F5A524"), Color("#30A46C"),
-	Color("#12A594"), Color("#4F7CFF"), Color("#8E4EC6"), Color("#E93D82"),
-]
+## The digits are white until a colour is picked from the theme's palette.
+const DIGIT_DEFAULT := Color("#F2F2F2")
 
 var preset: Preset
 var store: PresetStore
@@ -152,11 +150,11 @@ func _build_buttons() -> void:
 	_alarm_drawer.picked.connect(_choose_alarm)
 	add_child(_alarm_drawer)
 	_digits_drawer = ChoiceDrawer.new()
-	_digits_drawer.setup_colors(DIGIT_COLORS)
+	_digits_drawer.setup_colors(Themes.palette(preset.theme))
 	_digits_drawer.picked.connect(_choose_digit_color)
 	add_child(_digits_drawer)
 	_sand_drawer = ChoiceDrawer.new()
-	_sand_drawer.setup_colors(HoldMenu.COLORS)
+	_sand_drawer.setup_colors(Themes.palette(preset.theme))
 	_sand_drawer.picked.connect(_choose_sand_color)
 	add_child(_sand_drawer)
 	ActionBars.family(_menu, [_menu, _alarm_drawer, _digits_drawer, _sand_drawer])
@@ -282,7 +280,7 @@ func _on_menu_hovered(kind: String) -> void:
 			list.close()
 	if wanted != null and not wanted.is_open:
 		# The finger came up to the menu, so the next list goes on up above it.
-		var current := _alarm() if wanted == _alarm_drawer else str(_digit_color_index() if wanted == _digits_drawer else HoldMenu.color_index(_sand_color()))
+		var current := _alarm() if wanted == _alarm_drawer else str(_digit_color_index() if wanted == _digits_drawer else HoldMenu.color_index(_sand_color(), Themes.palette(preset.theme)))
 		wanted.open_below(_menu.rect(), current, _menu_down, true)
 
 
@@ -292,8 +290,8 @@ func _on_menu_picked(kind: String) -> void:
 
 
 func _digit_color() -> Color:
-	var saved: Variant = preset.data.get("digits", DIGIT_COLORS[0])
-	return saved if saved is Color else DIGIT_COLORS[0]
+	var saved: Variant = preset.data.get("digits", DIGIT_DEFAULT)
+	return saved if saved is Color else DIGIT_DEFAULT
 
 
 ## The sand: its own colour if one was picked, else the opposite of the tool's colour.
@@ -303,7 +301,7 @@ func _sand_color() -> Color:
 
 
 func _choose_sand_color(kind: String) -> void:
-	var color := HoldMenu.COLORS[int(kind)]
+	var color := Themes.palette(preset.theme)[int(kind)]
 	preset.data["sand"] = color
 	store.preset_changed()
 	for mass in _sand.find_children("*", "SandMass", true, false):
@@ -311,11 +309,11 @@ func _choose_sand_color(kind: String) -> void:
 
 
 func _digit_color_index() -> int:
-	return DIGIT_COLORS.find(_digit_color())
+	return Themes.palette(preset.theme).find(_digit_color())
 
 
 func _choose_digit_color(kind: String) -> void:
-	var color := DIGIT_COLORS[int(kind)]
+	var color := Themes.palette(preset.theme)[int(kind)]
 	preset.data["digits"] = color
 	store.preset_changed()
 	_digital.digit_color = color

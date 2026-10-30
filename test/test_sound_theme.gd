@@ -9,7 +9,7 @@ func test_every_theme_has_an_icon_that_exists_and_a_sound_set() -> void:
 	assert_eq(Themes.NAMES, ["dnd", "futuristic", "traditional", "old_school", "standard"])
 	for theme_name in Themes.NAMES:
 		assert_true(ResourceLoader.exists("res://assets/icons/lucide/%s.svg" % Themes.ICONS[theme_name]), "%s icon file" % theme_name)
-		assert_true(["future", "rpg"].has(Themes.sound_set(theme_name)))
+		assert_true(["future", "rpg", "futuristic", "traditional"].has(Themes.sound_set(theme_name)))
 	assert_eq(Themes.sound_set("dnd"), "rpg")
 	assert_eq(Themes.sound_set("standard"), "future")
 	assert_eq(Themes.sound_set("nonsense"), "future")
@@ -79,3 +79,37 @@ func test_what_the_buzzer_holds_loops_in_the_rpg_theme() -> void:
 	assert_null(SoundBank.sustained("ding"), "a bell is played once")
 	AppSettings.sound_theme = "future"
 	assert_eq(SoundBank.sustained("horn").loop_end, SoundBank.SAMPLE_RATE, "the other theme is as it was")
+
+
+func test_the_recorded_alarm_themes_have_recordings_for_the_buzzer_and_the_timers() -> void:
+	for theme_name in SoundBank.ALARM_THEMES:
+		AppSettings.sound_theme = theme_name
+		for kind in ["chime", "ding", "buzz", "horn", "siren"]:
+			var wav := SoundBank.stream(kind)
+			assert_gt(wav.data.size(), 50000, "%s %s is a recording" % [theme_name, kind])
+			assert_ne(wav.data, SoundBank.stream("alarm").data, "%s is not the original" % kind)
+		for kind in ["buzz", "horn", "siren"]:
+			var held := SoundBank.sustained(kind)
+			assert_eq(held.loop_mode, AudioStreamWAV.LOOP_FORWARD)
+			assert_eq(held.loop_end, held.data.size() / 2)
+		assert_null(SoundBank.sustained("ding"), "a ding is played once")
+		assert_ne(SoundBank.stream("chime").data, SoundBank.stream("buzz").data)
+	AppSettings.sound_theme = "futuristic"
+	var futuristic := SoundBank.stream("buzz").data
+	AppSettings.sound_theme = "traditional"
+	assert_ne(SoundBank.stream("buzz").data, futuristic, "each theme has its own")
+	assert_eq(Themes.sound_set("traditional"), "traditional")
+	AppSettings.sound_theme = "future"
+	assert_eq(SoundBank.sustained("horn").loop_end, SoundBank.SAMPLE_RATE, "the original set is as it was")
+	assert_eq(Themes.sound_set("futuristic"), "futuristic")
+
+
+func test_every_theme_has_a_palette_of_six_and_standard_is_the_default() -> void:
+	for theme_name in Themes.NAMES:
+		assert_eq(Themes.palette(theme_name).size(), 6, "%s has six colours" % theme_name)
+	assert_eq(Themes.palette("dnd")[2], Color("#D8A441"))
+	assert_eq(Themes.palette("futuristic")[1], Color("#00E5FF"))
+	assert_eq(Themes.palette("nonsense"), Themes.STANDARD_PALETTE)
+	assert_eq(DiceTool.PALETTE, Themes.STANDARD_PALETTE)
+	assert_eq(Themes.new_tool_color("standard", Preset.Type.HOURGLASS), Color("#EF4444"))
+	assert_eq(Themes.new_tool_color("dnd", Preset.Type.DICE), Color("#742C3B"))
