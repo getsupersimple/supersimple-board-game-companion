@@ -34,7 +34,7 @@ func test_a_large_plus_tile_ends_the_list_and_adds_a_game_with_no_limit() -> voi
 	assert_eq(plus.size, _home._grid.get_child(1).size, "as large as a game")
 	assert_eq(plus.position, _home.slot_position(_store.games.size()), "right after the last game")
 	var before := _store.games.size()
-	plus.pressed.emit()
+	_home._add_game_in("standard")
 	assert_eq(_store.games.size(), before + 1, "there is no maximum")
 	await wait_seconds(0.3)
 	assert_eq(_home._add_tile.position, _home.slot_position(_store.games.size()), "and it moves along")
@@ -62,7 +62,7 @@ func test_holding_a_game_opens_a_menu_of_icon_colour_and_delete() -> void:
 	await wait_seconds(0.3)
 	await _hold(_home._grid.get_child(1))
 	assert_true(_home._hold_menu.menu.is_open)
-	assert_eq(_home._hold_menu.menu._kinds, ["icon", "color", "delete"])
+	assert_eq(_home._hold_menu.menu._kinds, ["icon", "color", "theme", "delete"])
 	assert_false(_home._hold_menu.menu.is_disabled("delete"))
 
 
@@ -87,11 +87,11 @@ func test_keeping_the_finger_on_icon_pops_the_icons_out_underneath_and_one_can_b
 	var target := 5
 	_home._finger_moved(_at(_home._hold_menu.icon_drawer, target))
 	_home._finger_up(_at(_home._hold_menu.icon_drawer, target))
-	assert_eq(_store.games[1].icon, IconLibrary.GAME_ICONS[target])
+	assert_eq(_store.games[1].icon, Themes.icon_set(Themes.DEFAULT)[target])
 	assert_false(_home._hold_menu.icon_drawer.is_open)
 	var reloaded := PresetStore.new("user://test_home.cfg")
 	reloaded.load_store()
-	assert_eq(reloaded.games[1].icon, IconLibrary.GAME_ICONS[target], "saved")
+	assert_eq(reloaded.games[1].icon, Themes.icon_set(Themes.DEFAULT)[target], "saved")
 
 
 func test_colour_pops_a_list_of_colours_out_underneath_and_one_can_be_chosen() -> void:
@@ -103,7 +103,7 @@ func test_colour_pops_a_list_of_colours_out_underneath_and_one_can_be_chosen() -
 	assert_false(_home._hold_menu.icon_drawer.is_open)
 	_home._finger_moved(_at(_home._hold_menu.color_drawer, 3))
 	_home._finger_up(_at(_home._hold_menu.color_drawer, 3))
-	assert_eq(_store.games[1].color, HoldMenu.COLORS[3])
+	assert_eq(_store.games[1].color, Themes.palette(Themes.DEFAULT)[3])
 
 
 func test_delete_removes_the_game() -> void:
@@ -111,8 +111,8 @@ func test_delete_removes_the_game() -> void:
 	await wait_seconds(0.3)
 	var gone := _store.games[1].id
 	await _hold(_home._grid.get_child(1))
-	_home._finger_moved(_at(_home._hold_menu.menu, 2))
-	_home._finger_up(_at(_home._hold_menu.menu, 2))
+	_home._finger_moved(_at(_home._hold_menu.menu, 3))
+	_home._finger_up(_at(_home._hold_menu.menu, 3))
 	assert_null(_store.get_game(gone))
 	assert_eq(_store.games.size(), 2)
 
@@ -188,7 +188,7 @@ func test_a_hold_on_another_game_while_a_menu_is_left_open_opens_that_games_menu
 	var second: Control = _home._grid.get_child(2)
 	await _hold(first)
 	_press(first, false)
-	assert_true(_home._hold_menu.menu.is_open, "left open after the finger lifts")
+	assert_false(_home._hold_menu.menu.is_open, "put away when the finger lifts")
 	_touch_outside(Vector2(5, 5))
 	_press(second, true)
 	assert_false(_home._hold_menu.menu.is_open, "the touch put it away")
@@ -223,3 +223,46 @@ func test_letting_go_on_icon_puts_the_icons_away_with_the_menu() -> void:
 	_home._finger_up(_at(_home._hold_menu.menu, 0))
 	assert_false(_home._hold_menu.menu.is_open)
 	assert_false(_home._hold_menu.icon_drawer.is_open, "both go at once")
+
+
+func test_a_set_remembers_its_theme_and_changing_it_moves_its_icon_and_colour_into_the_theme() -> void:
+	_make_home(1)
+	await wait_seconds(0.3)
+	var game: Game = _store.games[1]
+	game.icon = "heart"
+	game.color = Color("#4F7CFF")
+	_store.set_game_theme(game.id, "dnd")
+	assert_eq(game.theme, "dnd")
+	assert_true(Themes.icon_set("dnd").has(game.icon), "an icon the theme has")
+	assert_true(Themes.palette("dnd").has(game.color), "a colour of its palette")
+	var reloaded := PresetStore.new("user://test_home.cfg")
+	reloaded.load_store()
+	assert_eq(reloaded.games[1].theme, "dnd", "saved")
+
+
+func test_adding_a_set_in_a_chosen_theme_uses_that_themes_icon_and_colour() -> void:
+	_make_home(1)
+	await wait_seconds(0.3)
+	_home._add_game_in("futuristic")
+	var added: Game = _store.games[_store.games.size() - 1]
+	assert_eq(added.theme, "futuristic")
+	assert_true(Themes.icon_set("futuristic").has(added.icon))
+	assert_true(Themes.palette("futuristic").has(added.color))
+
+
+func test_holding_the_plus_tile_offers_the_themes_and_a_tap_adds_a_set() -> void:
+	_make_home(1)
+	await wait_seconds(0.3)
+	var before := _store.games.size()
+	_home._on_add_held(_home._add_press)
+	assert_true(_home._theme_drawer.is_open)
+	_home._theme_drawer.close()
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	_home._on_add_tile_input(down)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	_home._on_add_tile_input(up)
+	assert_eq(_store.games.size(), before + 1, "a quick tap adds one")

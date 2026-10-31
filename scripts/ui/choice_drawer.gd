@@ -27,7 +27,7 @@ const LIFT := 90.0
 var is_open := false
 ## Letting go away from every choice closes the drawer even when the finger came from a
 ## long press. The colour drawer works this way.
-var close_on_release := false
+var close_on_release := true
 ## While on, the drawer catches every touch on its screen, so one outside it only puts it away. Off,
 ## only the drawer itself does and the rest go through to what is underneath.
 var modal := true

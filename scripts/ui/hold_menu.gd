@@ -40,7 +40,7 @@ var hold_origin := Vector2.ZERO
 ## menu away.
 var let_through := Callable()
 ## Letting go of the finger anywhere but on a choice puts the menu away, rather than leaving it open to be tapped.
-var close_on_release := false
+var close_on_release := true
 
 var _sub: ChoiceDrawer
 var _engaged := false
@@ -48,7 +48,7 @@ var _can_drag := false
 var _current_icon := ""
 var _current_color := Color.WHITE
 var _current_theme := ""
-## The colours on offer: the theme's for a tool, the general ones for a game.
+## The colours on offer: those of the theme.
 var _colors: Array[Color] = COLORS
 var _down := false
 
@@ -65,10 +65,6 @@ func _ready() -> void:
 	add_child(menu)
 
 	icon_drawer = ChoiceDrawer.new()
-	var identity := {}
-	for icon_name in IconLibrary.GAME_ICONS:
-		identity[icon_name] = icon_name
-	icon_drawer.setup(IconLibrary.GAME_ICONS, identity)
 	icon_drawer.modal = false
 	icon_drawer.columns = ICON_COLUMNS
 	icon_drawer.picked.connect(func(icon_name: String) -> void: _finish(); icon_chosen.emit(icon_name))
@@ -89,7 +85,7 @@ func _ready() -> void:
 	ActionBars.family(self, [menu, icon_drawer, color_drawer, theme_drawer])
 
 
-## Lists Theme among the choices only for things that have a theme (tools, not games).
+## Lists Theme among the choices only for things that have a theme.
 func _setup_menu(with_theme: bool) -> void:
 	var kinds: Array[String] = ["icon", "color"]
 	if with_theme:
@@ -103,12 +99,12 @@ func _setup_menu(with_theme: bool) -> void:
 
 ## Opens the menu around `menu_point`, with a finger down at `finger`. `can_delete` and
 ## `can_drag` say what may be done to the thing.
-func open(menu_point: Vector2, finger: Vector2, current_icon: String, current_color: Color, can_delete: bool, can_drag: bool, current_theme: String = "") -> void:
+func open(menu_point: Vector2, finger: Vector2, current_icon: String, current_color: Color, can_delete: bool, can_drag: bool, current_theme: String = Themes.DEFAULT) -> void:
 	_current_theme = current_theme
-	_setup_menu(current_theme != "")
-	_colors = Themes.palette(current_theme) if current_theme != "" else COLORS
+	_setup_menu(true)
+	_colors = Themes.palette(current_theme)
 	color_drawer.setup_colors(_colors)
-	var icons: Array[String] = Themes.icon_set(current_theme) if current_theme != "" else IconLibrary.GAME_ICONS
+	var icons := Themes.icon_set(current_theme)
 	var identity := {}
 	for icon_name in icons:
 		identity[icon_name] = icon_name

@@ -7,6 +7,8 @@ var id: String = ""
 var icon: String = ""
 var color: Color = Color.WHITE
 var is_builtin: bool = false
+## The look of the set: its icons and colours come from this theme, and so do the tools added to it.
+var theme: String = Themes.DEFAULT
 var presets: Array[Preset] = []
 
 
@@ -34,6 +36,7 @@ func to_dict() -> Dictionary:
 		"icon": icon,
 		"color": color,
 		"is_builtin": is_builtin,
+		"theme": theme,
 		"presets": preset_dicts,
 	}
 
@@ -47,6 +50,8 @@ static func from_dict(source: Dictionary) -> Game:
 	var raw_color: Variant = source.get("color", Color.WHITE)
 	game.color = raw_color if raw_color is Color else Color.WHITE
 	game.is_builtin = bool(source.get("is_builtin", false))
+	var raw_theme := str(source.get("theme", Themes.DEFAULT))
+	game.theme = raw_theme if Themes.is_known(raw_theme) else Themes.DEFAULT
 	var raw_presets: Variant = source.get("presets", [])
 	if raw_presets is Array:
 		for raw_preset in raw_presets:

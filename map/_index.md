@@ -4,7 +4,7 @@ One line per thing. Status: `verified` = checked against source on 2026-10-28. O
 
 ## Data and persistence (`scripts/core/`)
 
-- **Game** (set) `core/game.gd`: id, icon, colour, ordered `presets`; `to_dict`/`from_dict`. verified
+- **Game** (set) `core/game.gd`: id, icon, colour, `theme`, ordered `presets`; `to_dict`/`from_dict`. verified
 - **Preset** (tool) `core/preset.gd`: type, icon, colour, `data`, optional screen `position` (fractions). verified
 - **PresetStore** `core/preset_store.gd`: all games, every mutation autosaves; Quick always first. Tools call `preset_changed()` after editing `data`. verified
 - **AppSettings** `core/app_settings.gd`: static global switches; `sound_theme` is the sound set in use now (set from the tool on show, not saved). verified
@@ -29,7 +29,7 @@ One line per thing. Status: `verified` = checked against source on 2026-10-28. O
 
 ## Shared UI (`scripts/ui/`, `theme/`)
 
-- **UiStyle** shared look; **Spring** spring-chased values (all motion); **ChoiceDrawer** slide-onto-an-option row; **HoldMenu** Icon/Colour/Delete; **TapArea** big tap target; **TimeWheel** drag-to-set time. verified
+- **UiStyle** shared look; **Spring** spring-chased values (all motion); **ChoiceDrawer** slide-onto-an-option row; **HoldMenu** Icon/Colour/Theme/Delete; **TapArea** big tap target; **TimeWheel** drag-to-set time. verified
 - **TimeFormat**, **TimerAlert** `scripts/timer/`: clock text; end-of-timer vibrate + buzzer. verified
 - **ActionBars** `ui/action_bars.gd`: one drawer open at a time; drawers of one family (menu + its list) stay together.
 - **Haptics** `scripts/core/haptics.gd`: the one place the phone vibrates; drops a pulse that arrives while the last still runs.

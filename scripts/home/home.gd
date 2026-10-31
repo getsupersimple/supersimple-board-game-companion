@@ -3,7 +3,7 @@ extends Control
 ## Home screen: one tile per game, with the built-in Quick game first and a large + tile at
 ## the end of the list that adds another. The tiles scroll when they do not all fit.
 ##
-## Holding a tile opens a menu (see HoldMenu): its icon, its colour, delete. If instead the
+## Holding a tile opens a menu (see HoldMenu): its icon, its colour, its theme, delete. If instead the
 ## finger drags the tile away, the menu goes and the tile is picked up: it follows the finger
 ## round the list, the others slide aside to make room, and it springs into place where it is
 ## let go.
@@ -13,9 +13,6 @@ signal settings_pressed
 
 const COLUMNS := 2
 const GAP := 32.0
-const NEW_GAME_COLORS: Array[Color] = [
-	Color("#4F7CFF"), Color("#E5484D"), Color("#30A46C"), Color("#F5A524"), Color("#8E4EC6"),
-]
 const MARGIN := 48
 const LONG_PRESS_SECONDS := 0.45
 const DRAG_SLOP := 18.0
@@ -29,6 +26,10 @@ const SETTLE_DAMPING := 24.0
 var store: PresetStore
 
 var _hold_menu: HoldMenu
+## Offered by a long press on the + tile: the look of the set to add.
+var _theme_drawer: ChoiceDrawer
+var _add_press := 0
+var _add_held := false
 var _add_tile: GameTile
 var _tiles := {}
 var _springs := {}
@@ -64,11 +65,18 @@ func _ready() -> void:
 	_hold_menu = HoldMenu.new()
 	_hold_menu.icon_chosen.connect(_on_icon_chosen)
 	_hold_menu.color_chosen.connect(_on_color_chosen)
+	_hold_menu.theme_chosen.connect(_on_theme_chosen)
 	_hold_menu.delete_chosen.connect(_on_delete_chosen)
 	_hold_menu.drag_started.connect(_on_drag_started)
 	_hold_menu.dismissed.connect(func() -> void: _dismissed_msec = Time.get_ticks_msec())
 	_hold_menu.let_through = func(_point: Vector2) -> bool: return true
 	add_child(_hold_menu)
+
+	_theme_drawer = ChoiceDrawer.new()
+	_theme_drawer.setup(Themes.NAMES, Themes.ICONS)
+	_theme_drawer.columns = Themes.NAMES.size()
+	_theme_drawer.picked.connect(_add_game_in)
+	add_child(_theme_drawer)
 
 
 func show_games(game_store: PresetStore) -> void:
@@ -86,7 +94,7 @@ func show_games(game_store: PresetStore) -> void:
 		_add_game_tile(game)
 	_add_tile = GameTile.new()
 	_add_tile.setup("plus", UiStyle.PANEL, "HOME_ADD_GAME")
-	_add_tile.pressed.connect(_on_add_game_pressed)
+	_add_tile.gui_input.connect(_on_add_tile_input)
 	_grid.add_child(_add_tile)
 	_update_tile_sizes()
 	_layout(true)
@@ -145,7 +153,7 @@ func _on_tile_held(press_id: int, tile: GameTile, game: Game) -> void:
 	_held_game = game
 	_held_tile = tile
 	var changeable := not game.is_builtin
-	_hold_menu.open(tile.get_global_rect().get_center(), tile.get_global_mouse_position(), game.icon, game.color, changeable, changeable)
+	_hold_menu.open(tile.get_global_rect().get_center(), tile.get_global_mouse_position(), game.icon, game.color, changeable, changeable, game.theme)
 
 
 ## The finger that is down moves: into the menu or its lists, or, once it has been taken away
@@ -182,6 +190,13 @@ func _on_color_chosen(color: Color) -> void:
 	if _held_game == null:
 		return
 	store.set_game_color(_held_game.id, color)
+	show_games(store)
+
+
+func _on_theme_chosen(theme_name: String) -> void:
+	if _held_game == null:
+		return
+	store.set_game_theme(_held_game.id, theme_name)
 	show_games(store)
 
 
@@ -285,13 +300,40 @@ func _place(game_id: String, point: Vector2, snap: bool) -> void:
 		spring.target = point
 
 
-func _on_add_game_pressed() -> void:
-	if Time.get_ticks_msec() - _dismissed_msec < 400:
+## A tap on the + tile adds a set in a random theme; holding it offers the themes to pick from.
+func _on_add_tile_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_add_press += 1
+			_add_held = false
+			get_tree().create_timer(LONG_PRESS_SECONDS).timeout.connect(_on_add_held.bind(_add_press))
+		else:
+			_add_press += 1
+			if _add_held:
+				_add_held = false
+				_theme_drawer.pointer_up(_add_tile.get_global_mouse_position() - _theme_drawer.global_position)
+			elif Time.get_ticks_msec() - _dismissed_msec >= 400:
+				_add_game_in(Themes.NAMES.pick_random())
+	elif event is InputEventMouseMotion and _add_held:
+		_theme_drawer.pointer_move(_add_tile.get_global_mouse_position() - _theme_drawer.global_position)
+
+
+func _on_add_held(press_id: int) -> void:
+	if _add_press != press_id:
 		return
+	_add_held = true
+	Haptics.pulse(20)
+	_theme_drawer.open_below(_add_tile.get_global_rect(), "", true, true)
+
+
+## Adds a set in a theme: its icon and colour are the next ones of that theme's.
+func _add_game_in(theme_name: String) -> void:
 	var index := store.games.size() - 1
-	var icon_name := IconLibrary.DEFAULT_GAME_ICONS[index % IconLibrary.DEFAULT_GAME_ICONS.size()]
-	var tile_color := NEW_GAME_COLORS[index % NEW_GAME_COLORS.size()]
-	store.add_game(Game.create(icon_name, tile_color))
+	var icons := Themes.icon_set(theme_name)
+	var colors := Themes.palette(theme_name)
+	var game := Game.create(icons[index % icons.size()], colors[index % colors.size()])
+	game.theme = theme_name
+	store.add_game(game)
 	show_games(store)
 	# Scrolled to the end, where the new game is.
 	await get_tree().process_frame

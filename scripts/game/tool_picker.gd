@@ -129,7 +129,7 @@ func pointer_move(point: Vector2) -> void:
 			_theme_row = -1
 
 
-## The finger lifted. Over a theme that is that theme, over a kind the default theme; the
+## The finger lifted. Over a theme that is that theme, over a kind the set's own theme (an empty name); the
 ## drawer closes whichever.
 func pointer_up(point: Vector2) -> void:
 	pointer_move(point)
@@ -142,7 +142,7 @@ func pointer_up(point: Vector2) -> void:
 	elif _row >= 0:
 		var kind := _types[_row]
 		close()
-		picked.emit(kind, Themes.DEFAULT)
+		picked.emit(kind, "")
 	else:
 		close()
 

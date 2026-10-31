@@ -50,8 +50,6 @@ const SHAKE_COOLDOWN := 0.5
 const AUTO_LOCK_HOLD := 0.35
 ## After Unlock all, auto lock waits this long before it may lock anything again.
 const AUTO_LOCK_PAUSE := 1.0
-## Once every die has landed, they are held exactly where they lie for this long (seconds).
-const PIN_SECONDS := 2.0
 ## After being let go, the dice have to move this long (seconds) before they are held again.
 const PIN_REARM_SECONDS := 0.4
 const CAMERA_HEIGHT := 20.0
@@ -62,8 +60,6 @@ const WALL_THICKNESS := 2.0
 ## The share of the visible floor inside the walls: nearly all of it, so the dice can go right
 ## down to the edge of the view.
 const VIEW_FILL := 0.985
-## A tap on the table sends every die up at about this speed.
-const JUMP_SPEED := 4.5
 ## The screen glass: dice stay inside a shallow box, as on a real device.
 const CEILING_HEIGHT := 6.0
 ## Dice are dropped in from no higher than this.
@@ -103,10 +99,9 @@ var _last_haptic_ms := 0
 var _bounds: Node3D
 var _flat_time := {}
 var _auto_lock_pause := 0.0
-## Seconds left of holding the settled dice in place; zero when they are free.
-var _pin_left := 0.0
+## Whether the settled dice are held exactly where they lie, until a tap lets them go.
 var _pinned := false
-## The dice were held once since they last moved, so they are not held again until they do.
+## A tap let the dice go: they are not held again until they have moved.
 var _pin_spent := false
 ## How long some die has been moving, without a break.
 var _moving_time := 0.0
@@ -240,18 +235,6 @@ func throw_all(direction: Vector2, speed: float) -> void:
 		die.sleeping = false
 		die.linear_velocity = heading * speed * randf_range(0.85, 1.15) + Vector3.UP * randf_range(2.5, 4.5)
 		die.angular_velocity = _random_spin(20.0)
-	_unsettle()
-
-
-## Every unlocked die jumps up, as if the surface had been tapped from underneath.
-func jump_all() -> void:
-	_unpin()
-	for die in dice:
-		if die.locked:
-			continue
-		die.sleeping = false
-		die.linear_velocity += Vector3.UP * randf_range(JUMP_SPEED * 0.8, JUMP_SPEED * 1.2)
-		die.angular_velocity += _random_spin(4.0)
 	_unsettle()
 
 
@@ -537,22 +520,22 @@ func _unsettle() -> void:
 	_emit_results()
 
 
+## A tap on the table lets settled dice go; they stay where they are until something moves them.
+func release() -> void:
+	_pin_spent = true
+	_unpin()
+
+
 ## Lets the held dice go.
 func _unpin() -> void:
 	if not _pinned:
 		return
 	_pinned = false
-	_pin_left = 0.0
 	for die in dice:
 		die.pin(false)
 
 
 func _check_settled(delta: float) -> void:
-	if _pinned:
-		_pin_left -= delta
-		if _pin_left <= 0.0:
-			_pin_spent = true
-			_unpin()
 	for die in dice:
 		# A die pressed down, or held in a finger, is slow without having landed: it does not count
 		# as settled until it is let go.
@@ -571,7 +554,7 @@ func _check_settled(delta: float) -> void:
 		_pin_spent = false
 	if all_settled and not _pinned and not _pin_spent:
 		_pinned = true
-		_pin_left = PIN_SECONDS
+		Haptics.pulse(25)
 		for die in dice:
 			die.pin(true)
 	_emit_results()

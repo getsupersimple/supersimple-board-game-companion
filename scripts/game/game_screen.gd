@@ -482,7 +482,8 @@ func _to_picker(button_point: Vector2) -> Vector2:
 	return _add_button.global_position + button_point - _picker.global_position
 
 
-func _on_type_picked(preset_type: Preset.Type, theme_name: String) -> void:
+func _on_type_picked(preset_type: Preset.Type, chosen_theme: String) -> void:
+	var theme_name := chosen_theme if chosen_theme != "" else game.theme
 	var preset := Preset.create_default(preset_type)
 	preset.theme = theme_name
 	preset.color = Themes.new_tool_color(theme_name, preset_type)

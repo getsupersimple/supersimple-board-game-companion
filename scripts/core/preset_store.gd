@@ -78,6 +78,21 @@ func move_game(game_id: String, to_index: int) -> void:
 	save_store()
 
 
+## Gives a set another theme. Its icon and colour move to the new theme's: the icon is kept if
+## the theme has it, and the colour becomes the nearest of the new palette.
+func set_game_theme(game_id: String, theme_name: String) -> void:
+	var game := get_game(game_id)
+	if game == null or not Themes.is_known(theme_name):
+		return
+	game.theme = theme_name
+	var icons := Themes.icon_set(theme_name)
+	if not icons.has(game.icon):
+		game.icon = icons[0]
+	var colors := Themes.palette(theme_name)
+	game.color = colors[Themes.nearest_index(colors, game.color)]
+	save_store()
+
+
 func set_game_icon(game_id: String, icon: String) -> void:
 	var game := get_game(game_id)
 	if game == null:

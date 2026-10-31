@@ -15,7 +15,7 @@ First-order only. Open the listed files, run the listed tests (`-gselect=<file>`
 | Hold menu or drawers | `hold_menu.gd`, `choice_drawer.gd`; callers: `home.gd`, `game_screen.gd`, `tool_picker.gd`, the three tools | `test_choice_drawer`, `test_home` | `DiceDrawer` is separate (the add-die drawer) |
 | Home screen | `home.gd`, `game_tile.gd`, `home.tscn` | `test_home` | GameScreen |
 | Die geometry or face reading | `die_shape.gd`, `die.gd` | `test_die_shape` | Dice table walls/camera |
-| Dice physics, camera, walls, auto-lock, two-second pin once all dice settle (`Die.pin`, `DiceTable.PIN_SECONDS`) | `dice_table.gd`, `die.gd`, `dice_tool.gd` | `test_dice_table_motion` | `DieShape` |
+| Dice physics, camera, walls, auto-lock, pin once all dice settle until a tap (`Die.pin`, `DiceTable.release`) | `dice_table.gd`, `die.gd`, `dice_tool.gd` | `test_dice_table_motion` | `DieShape` |
 | Hourglass glass outline | `hourglass_shape.gd`, then `hourglass_art.gd`, `hourglass_sand.gd` (container), `sand_mass.gd` | `test_hourglass` | Time logic (system clock, in `HourglassSand`/`HourglassTool`) |
 | Hourglass timing or modes | `hourglass_tool.gd`, `hourglass_sand.gd`, `time_wheel.gd` | `test_hourglass` | Frame counting is forbidden; use the system clock |
 | Look (colours, fonts, shapes) | `theme/app_theme.tres`, `ui_style.gd` | none; check on device | Hardcoded colours in scripts |

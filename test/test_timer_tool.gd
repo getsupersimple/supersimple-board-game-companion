@@ -217,9 +217,9 @@ func test_dragging_the_digital_timer_sets_how_long_it_counts() -> void:
 
 
 func test_the_display_reads_minutes_and_seconds() -> void:
-	assert_eq(DigitalTimer.digits_for(83000), [0, 1, 2, 3])
-	assert_eq(DigitalTimer.digits_for(59001), [0, 1, 0, 0])
-	assert_eq(DigitalTimer.digits_for(0), [0, 0, 0, 0])
+	assert_eq(DigitalTimer.digits_for(83000), [0, 1, 2, 3, 0, 0, 0])
+	assert_eq(DigitalTimer.digits_for(59001), [0, 0, 5, 9, 0, 0, 1])
+	assert_eq(DigitalTimer.digits_for(0), [0, 0, 0, 0, 0, 0, 0])
 
 
 func test_the_glass_ends_wear_the_tools_colour_and_the_sand_its_own() -> void:

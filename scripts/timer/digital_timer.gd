@@ -18,6 +18,10 @@ const TAP_SLOP := 30.0
 const ROW_HEIGHT := 84.0
 const MAX_SECONDS := TimeWheel.MAX_SECONDS
 const BORDER := 14.0
+## The milliseconds are drawn at this fraction of the size of the other digits.
+const MILLIS_SCALE := 0.5
+## The room they take, with their dot, in digit widths.
+const MILLIS_WIDTH := 2.4
 const GLASS := Color("#09090A")
 ## Which of the seven segments, a to g, each digit lights.
 const DIGITS := ["abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg"]
@@ -158,12 +162,13 @@ func _on_held(press_id: int) -> void:
 	held.emit(_pressed_at)
 
 
-## The display's text as digits: minutes and seconds, always four.
+## The display's text as digits: minutes and seconds, always four, then the three of the milliseconds.
 static func digits_for(ms: int) -> Array[int]:
-	var total := int(ceil(ms / 1000.0))
+	var total := ms / 1000
 	var minutes := mini(total / 60, 99)
 	var seconds := total % 60
-	return [minutes / 10, minutes % 10, seconds / 10, seconds % 10]
+	var millis := ms % 1000
+	return [minutes / 10, minutes % 10, seconds / 10, seconds % 10, millis / 100, (millis / 10) % 10, millis % 10]
 
 
 func _draw() -> void:
@@ -171,7 +176,7 @@ func _draw() -> void:
 	panel.set_border_width_all(int(BORDER))
 	panel.border_color = color
 	var area := Rect2(Vector2(40.0, 0.0), Vector2(maxf(size.x - 80.0, 10.0), 0.0))
-	var digit_width := area.size.x / 7.3
+	var digit_width := area.size.x / (7.3 + MILLIS_WIDTH)
 	var digit_height := digit_width * 1.8
 	area.size.y = digit_height + digit_width * 1.2
 	area.position.y = (size.y - area.size.y) / 2.0
@@ -192,6 +197,14 @@ func _draw() -> void:
 		if i == 1:
 			_draw_colon(Vector2(x + digit_width * 0.05, y), digit_width, digit_height, thickness, not running or blink)
 			x += digit_width * 0.6
+	# The milliseconds sit small on the line the others stand on, after a dot.
+	var small := Vector2(digit_width, digit_height) * MILLIS_SCALE
+	var dot := digit_width * 0.12
+	draw_rect(Rect2(x - digit_width * 0.2 - dot / 2.0, y + digit_height - dot, dot, dot), digit_color if shown else _faint())
+	x += digit_width * 0.2
+	for i in range(4, 7):
+		_draw_digit(Rect2(x, y + digit_height - small.y, small.x, small.y), thickness * MILLIS_SCALE, digits[i], shown)
+		x += small.x + digit_width * 0.25
 
 
 ## Unlit segments: the same colour, nearly black.

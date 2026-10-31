@@ -343,6 +343,7 @@ func test_a_pill_shrinks_away_when_its_die_moves_and_does_not_blink() -> void:
 	tool._moving_for[die] = 0.05
 	tool._place_scores(0.01)
 	assert_almost_eq((tool._scores[die] as Control).scale.x, 1.0, 0.05)
+	tool._table.release()
 	die.linear_velocity = Vector3(5, 0, 0)
 	for i in 3:
 		tool._place_scores(0.05)
@@ -431,7 +432,7 @@ func test_the_bare_table_menu_can_remove_every_die() -> void:
 	assert_eq(tool.preset.data["dice"].size(), 0, "kept with the preset")
 
 
-func test_settled_dice_are_held_in_place_for_two_seconds() -> void:
+func test_settled_dice_are_held_until_a_tap_and_then_stay_free() -> void:
 	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}])
 	var die: Die = null
 	var waited := 0.0
@@ -440,7 +441,9 @@ func test_settled_dice_are_held_in_place_for_two_seconds() -> void:
 		waited += 0.25
 		die = tool._table.dice[0]
 	assert_true(die.freeze, "held once it has landed")
-	await wait_seconds(DiceTable.PIN_SECONDS + 0.5)
-	assert_false(die.freeze, "let go after two seconds")
-	await wait_seconds(0.6)
-	assert_false(die.freeze, "and not held again while it stays still")
+	await wait_seconds(2.5)
+	assert_true(die.freeze, "and kept so")
+	tool._table.release()
+	assert_false(die.freeze, "a tap lets it go")
+	await wait_seconds(0.8)
+	assert_false(die.freeze, "and it is not held again while it stays still")

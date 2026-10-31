@@ -23,13 +23,13 @@ func test_the_row_opens_just_above_the_finger_and_stays_on_screen() -> void:
 	assert_gt(drawer.rect().position.y, 20.0, "and below a finger at the very top")
 
 
-func test_letting_go_over_a_sound_picks_it_and_elsewhere_leaves_the_row_open() -> void:
+func test_letting_go_over_a_sound_picks_it_and_elsewhere_puts_the_row_away() -> void:
 	var drawer := _drawer()
 	var picked: Array = []
 	drawer.picked.connect(func(kind: String) -> void: picked.append(kind))
 	drawer.open(Vector2(500, 800), "buzz", true)
 	drawer.pointer_up(Vector2(500, 1300))
-	assert_true(drawer.is_open, "the finger lifted elsewhere, so it waits to be touched")
+	assert_false(drawer.is_open, "the finger lifted elsewhere, so the row goes")
 	assert_eq(picked.size(), 0)
 	drawer.open(Vector2(500, 800), "buzz", true)
 	drawer.pointer_move(drawer.item_rect(2).get_center())

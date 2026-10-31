@@ -108,16 +108,13 @@ func test_moving_to_another_die_puts_the_colours_away() -> void:
 	assert_false(drawer.colors_are_out())
 
 
-func test_letting_go_on_the_plus_leaves_the_drawer_open_and_a_tap_outside_closes_it() -> void:
+func test_letting_go_away_from_the_dice_after_a_hold_closes_the_drawer() -> void:
 	var tool := _tool()
 	await wait_seconds(0.3)
 	var drawer: DiceDrawer = tool._drawer
 	drawer.open(tool._plus, true)
 	drawer.pointer_up(Vector2(5, 5))
-	assert_true(drawer.is_open, "left open to be touched")
-	drawer.pointer_down(Vector2(5, 5))
-	drawer.pointer_up(Vector2(5, 5))
-	assert_false(drawer.is_open)
+	assert_false(drawer.is_open, "put away on release")
 
 
 func test_tapping_the_plus_opens_the_drawer_and_a_tap_on_a_die_adds_it() -> void:

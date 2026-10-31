@@ -121,7 +121,7 @@ func _ready() -> void:
 
 
 ## A finger on the table picks up the die under it, drags it around, and lets
-## go on release. A quick tap that goes nowhere makes every die jump. Holding a finger
+## go on release. A quick tap that goes nowhere lets settled dice go. Holding a finger
 ## on the bare table opens a drawer of what to do with the locks, and a swipe away from it
 ## after that throws the dice. Touches are delivered
 ## as left clicks and drags, and the view has the same size as the container.
@@ -152,7 +152,7 @@ func _on_table_input(event: InputEvent) -> void:
 				return
 			var quick := Time.get_ticks_msec() - _tap_msec < TAP_MSEC
 			if quick and event.position.distance_to(_tap_start) < TAP_SLOP:
-				_table.jump_all()
+				_table.release()
 	elif event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
 		_last_point = event.position
 		if _held_menu != null:

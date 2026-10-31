@@ -49,8 +49,6 @@ var _column_position := Vector2.ZERO
 var _row := -1
 var _swatch := -1
 var _down := false
-## The first release after a held press from the + button leaves the drawer open.
-var _from_drag := false
 ## Opened by a tap: stays open after a die is picked.
 var _sticky := false
 var _dwell := 0.0
@@ -86,7 +84,6 @@ func open(anchor: Control, held: bool) -> void:
 	_column_position = top_left
 	is_open = true
 	_down = held
-	_from_drag = held
 	_sticky = not held
 	_row = -1
 	_swatch = -1
@@ -190,11 +187,8 @@ func pointer_up(point: Vector2) -> void:
 	elif _row >= 0:
 		picked.emit(sides_list[_row], null)
 		_finish_pick()
-	elif _from_drag:
-		_from_drag = false
 	else:
 		close()
-	_from_drag = false
 
 
 ## The column hangs under the + button, which can sit above the tool, so a touch on it

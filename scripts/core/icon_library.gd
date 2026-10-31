@@ -8,16 +8,6 @@ const FOLDER := "res://assets/icons/lucide/"
 const CUSTOM_FOLDER := "res://assets/icons/custom/"
 const FALLBACK := "dices"
 
-## What a new game starts with, one after another.
-const DEFAULT_GAME_ICONS: Array[String] = ["dices", "swords", "shield", "timer", "zap"]
-## Icons a game can be given, from things that belong in games.
-const GAME_ICONS: Array[String] = [
-	"dices", "swords", "sword", "shield", "crown",
-	"trophy", "gem", "diamond", "spade", "heart",
-	"cross", "star", "target", "ghost", "moon",
-	"flask", "rook", "zap", "timer", "music",
-]
-
 
 static func get_icon(icon_name: String) -> Texture2D:
 	var path := CUSTOM_FOLDER + icon_name + ".svg"

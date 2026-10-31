@@ -72,21 +72,6 @@ func test_face_down_phone_presses_dice_against_the_screen_glass() -> void:
 	assert_almost_eq(table.gravity_direction_from_sensor(Vector3(0, 0, 9.8)).y, 1.0, 0.001)
 
 
-func test_jump_all_sends_every_unlocked_die_up() -> void:
-	var table := DiceTable.new()
-	add_child_autofree(table)
-	table.set_view_aspect(0.5)
-	var free := table.add_die(6, Color.RED)
-	var locked := table.add_die(6, Color.BLUE)
-	locked.locked = true
-	await wait_seconds(2.5)
-	free.linear_velocity = Vector3.ZERO
-	locked.linear_velocity = Vector3.ZERO
-	table.jump_all()
-	assert_gt(free.linear_velocity.y, 3.0, "up")
-	assert_eq(locked.linear_velocity.y, 0.0, "a locked die stays")
-
-
 func test_the_walls_keep_even_a_tall_die_inside_the_view() -> void:
 	# Without perspective a die is drawn where its floor point is, however tall, so the walls
 	# can stand at the very edge of the view and nothing is cut off.
