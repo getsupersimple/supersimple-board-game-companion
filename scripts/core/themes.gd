@@ -61,7 +61,7 @@ const ICON_SETS := {
 
 const SOUND_SETS := {
 	"dnd": "rpg", "futuristic": "futuristic", "traditional": "traditional",
-	"old_school": "future", "standard": "future",
+	"old_school": "old_school", "standard": "future",
 }
 
 

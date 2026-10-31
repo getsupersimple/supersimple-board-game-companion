@@ -13,13 +13,16 @@ const BUZZER_ICONS := {"buzz": "circle-x", "ding": "bell", "horn": "megaphone", 
 const RPG_FILES := {"chain": "lock", "unchain": "unlock", "chime": "chime", "ding": "ding"}
 ## What the "rpg" theme holds down: a low bronze gong, a war horn and an alarm bell.
 const RPG_HELD := {"buzz": "buzz_loop", "horn": "horn_loop", "siren": "siren_loop"}
-## Themes made of five recorded alarms, in `assets/sounds/<theme>/` under the same file names.
-## They serve every tool that ends or calls with a sound: the buzzer's four, and the hourglass and
-## digital timer's end sounds (chime by default). Dice sounds are not recorded for these, so they
-## stay as in the original set.
-const ALARM_THEMES: Array[String] = ["futuristic", "traditional"]
+## Themes made of recordings, in `assets/sounds/<theme>/` under the same file names: five alarms
+## that serve every tool that ends or calls with a sound (the buzzer's four, and the hourglass and
+## digital timer's end sounds, chime by default), and a knock and a lock and unlock for the dice.
+const ALARM_THEMES: Array[String] = ["futuristic", "traditional", "old_school"]
+## Their dice sounds, by what they are for: a die knocking, a lock closing, a lock opening.
+const DICE_FILES := {"tick": "tick", "chain": "lock", "unchain": "unlock"}
 const ALARM_FILES := {"chime": "chime", "ding": "ding", "buzz": "buzz_loop", "horn": "horn_loop", "siren": "siren_loop"}
 const ALARM_HELD := {"buzz": "buzz_loop", "horn": "horn_loop", "siren": "siren_loop"}
+## The recordings of dice being rolled, by sound theme. Themes without one just have the knocks.
+const ROLL_FILES := {"rpg": "die_roll", "futuristic": "die_roll", "traditional": "die_roll", "old_school": "die_roll"}
 ## How many recordings of a die knocking there are.
 const KNOCKS := 4
 
@@ -41,7 +44,7 @@ static func play_once(host: Node, kind: String) -> void:
 ## theme does not change are the same in every theme.
 static func stream(kind: String) -> AudioStreamWAV:
 	if ALARM_THEMES.has(AppSettings.sound_theme):
-		var recorded: String = ALARM_FILES.get(kind, "")
+		var recorded: String = ALARM_FILES.get(kind, DICE_FILES.get(kind, ""))
 		if recorded != "":
 			return _recording(recorded, AppSettings.sound_theme)
 	if AppSettings.sound_theme == "rpg":
@@ -55,6 +58,12 @@ static func stream(kind: String) -> AudioStreamWAV:
 	if not _cache.has(key):
 		_cache[key] = _build(kind)
 	return _cache[key]
+
+
+## The sound of dice being thrown in the sound theme that is chosen now, or null if it has none.
+static func roll() -> AudioStreamWAV:
+	var file: String = ROLL_FILES.get(AppSettings.sound_theme, "")
+	return _recording(file, AppSettings.sound_theme) if file != "" else null
 
 
 ## A recording of a theme ("rpg" unless said), loaded once.

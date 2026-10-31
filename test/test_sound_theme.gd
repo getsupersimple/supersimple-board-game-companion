@@ -9,7 +9,7 @@ func test_every_theme_has_an_icon_that_exists_and_a_sound_set() -> void:
 	assert_eq(Themes.NAMES, ["dnd", "futuristic", "traditional", "old_school", "standard"])
 	for theme_name in Themes.NAMES:
 		assert_true(ResourceLoader.exists("res://assets/icons/lucide/%s.svg" % Themes.ICONS[theme_name]), "%s icon file" % theme_name)
-		assert_true(["future", "rpg", "futuristic", "traditional"].has(Themes.sound_set(theme_name)))
+		assert_true(["future", "rpg", "futuristic", "traditional", "old_school"].has(Themes.sound_set(theme_name)))
 	assert_eq(Themes.sound_set("dnd"), "rpg")
 	assert_eq(Themes.sound_set("standard"), "future")
 	assert_eq(Themes.sound_set("nonsense"), "future")
@@ -123,3 +123,30 @@ func test_every_theme_has_twenty_icons_and_each_has_a_file() -> void:
 			assert_true(ResourceLoader.exists("res://assets/icons/lucide/%s.svg" % icon_name), "%s: %s" % [theme_name, icon_name])
 	assert_true(Themes.icon_set("dnd").has("sword"))
 	assert_eq(Themes.icon_set("nonsense"), Themes.icon_set("standard"))
+
+
+func test_the_traditional_theme_has_a_recording_of_dice_being_rolled() -> void:
+	AppSettings.sound_theme = "traditional"
+	var rolling := SoundBank.roll()
+	assert_not_null(rolling)
+	assert_gt(rolling.get_length(), 2.0)
+	AppSettings.sound_theme = "future"
+	assert_null(SoundBank.roll(), "the original set only has the knocks")
+	AppSettings.sound_theme = "future"
+
+
+func test_every_recorded_theme_has_its_dice_sounds_and_a_roll() -> void:
+	for sound_set in ["futuristic", "traditional", "old_school"]:
+		AppSettings.sound_theme = sound_set
+		for kind in ["tick", "chain", "unchain", "chime", "ding", "buzz", "horn", "siren"]:
+			var wav := SoundBank.stream(kind)
+			assert_not_null(wav, "%s: %s" % [sound_set, kind])
+			assert_gt(wav.data.size(), 1000, "%s: %s has sound in it" % [sound_set, kind])
+		assert_not_null(SoundBank.roll(), "%s rolls" % sound_set)
+		for kind in ["buzz", "horn", "siren"]:
+			assert_eq(SoundBank.sustained(kind).loop_mode, AudioStreamWAV.LOOP_FORWARD, "%s: %s loops" % [sound_set, kind])
+	AppSettings.sound_theme = "rpg"
+	assert_not_null(SoundBank.roll(), "DnD rolls")
+	AppSettings.sound_theme = "future"
+	assert_null(SoundBank.roll())
+	assert_ne(SoundBank.stream("tick"), null)

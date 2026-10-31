@@ -107,6 +107,7 @@ var _pin_spent := false
 var _moving_time := 0.0
 ## A die that has just been unlocked waits this long (seconds, counting down) before auto lock takes it again.
 var _hold_off := {}
+var _roll_voice: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -160,6 +161,18 @@ func add_percentile(color: Color) -> Array[Die]:
 
 
 ## Removing one half of a percentile pair removes both.
+## A theme with a recording of dice being rolled plays it as they are thrown.
+func _play_roll() -> void:
+	var rolling := SoundBank.roll()
+	if rolling == null or not AppSettings.dice_sound or dice.is_empty() or not is_inside_tree():
+		return
+	if _roll_voice == null:
+		_roll_voice = AudioStreamPlayer.new()
+		add_child(_roll_voice)
+	_roll_voice.stream = rolling
+	_roll_voice.play()
+
+
 ## A knock plays a click, louder and lower for a harder knock, and a hard one
 ## also gives a light tap in the hand.
 func _on_impact(strength: float) -> void:
@@ -213,6 +226,7 @@ func remove_all() -> void:
 ## Throws every unlocked die again. Locked dice stay where they are.
 func roll_all() -> void:
 	_unpin()
+	_play_roll()
 	for die in dice:
 		if die.locked:
 			continue
@@ -228,6 +242,7 @@ func roll_all() -> void:
 ## y down the screen), `speed` how hard.
 func throw_all(direction: Vector2, speed: float) -> void:
 	_unpin()
+	_play_roll()
 	var heading := Vector3(direction.x, 0.0, direction.y).normalized()
 	for die in dice:
 		if die.locked:
