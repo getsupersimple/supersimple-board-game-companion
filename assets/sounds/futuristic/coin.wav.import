@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://bvse65lctakra"
-path="res://.godot/imported/tick.wav-e1e13535c472ee5c173eb13db44bd303.sample"
+uid="uid://bvsv33d4iy8v"
+path="res://.godot/imported/coin.wav-80c4569b728d2ea2928ee5ff791b9fea.sample"
 
 [deps]
 
-source_file="res://assets/sounds/old_school/tick.wav"
-dest_files=["res://.godot/imported/tick.wav-e1e13535c472ee5c173eb13db44bd303.sample"]
+source_file="res://assets/sounds/futuristic/coin.wav"
+dest_files=["res://.godot/imported/coin.wav-80c4569b728d2ea2928ee5ff791b9fea.sample"]
 
 [params]
 

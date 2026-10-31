@@ -105,6 +105,8 @@ var _pinned := false
 var _pin_spent := false
 ## How long some die has been moving, without a break.
 var _moving_time := 0.0
+## How long every die has been still at once.
+var _still_time := 0.0
 ## A die that has just been unlocked waits this long (seconds, counting down) before auto lock takes it again.
 var _hold_off := {}
 var _roll_voice: AudioStreamPlayer
@@ -143,7 +145,7 @@ func add_die(side_count: int, color: Color, style: Die.NumeralStyle = Die.Numera
 	die.basis = Basis(Quaternion(Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized(), randf() * TAU))
 	die.linear_velocity = Vector3(0, -2.0, 0)
 	die.angular_velocity = _random_spin(8.0)
-	die.impact.connect(_on_impact)
+	die.impact.connect(_on_impact.bind(die))
 	die.unlocked.connect(func() -> void: _hold_off[die] = AUTO_LOCK_PAUSE)
 	dice.append(die)
 	_unsettle()
@@ -175,11 +177,12 @@ func _play_roll() -> void:
 
 ## A knock plays a click, louder and lower for a harder knock, and a hard one
 ## also gives a light tap in the hand.
-func _on_impact(strength: float) -> void:
+func _on_impact(strength: float, die: Die) -> void:
 	if AppSettings.dice_sound:
 		var voice := _voices[_next_voice]
 		_next_voice = (_next_voice + 1) % _voices.size()
-		voice.stream = SoundBank.stream("tick")
+		# A coin rings; any other die knocks.
+		voice.stream = SoundBank.stream("coin" if die.sides == 2 else "tick")
 		voice.volume_db = linear_to_db(clampf(strength / LOUD_SPEED, 0.08, 1.0))
 		voice.pitch_scale = randf_range(0.85, 1.25) - minf(strength / LOUD_SPEED, 1.0) * 0.2
 		voice.play()
@@ -543,6 +546,7 @@ func release() -> void:
 
 ## Lets the held dice go.
 func _unpin() -> void:
+	_still_time = 0.0
 	if not _pinned:
 		return
 	_pinned = false
@@ -557,9 +561,14 @@ func _check_settled(delta: float) -> void:
 		var landed := die.is_at_rest() and (die.locked or (not _pressing and die != _grabbed))
 		_rest[die] = (float(_rest.get(die, 0.0)) + delta) if landed else 0.0
 	var all_settled := not dice.is_empty() and _grabbed == null and not _pressing
+	var all_still := all_settled
 	for die in dice:
 		if float(_rest.get(die, 0.0)) < SETTLE_HOLD:
 			all_settled = false
+		if not die.is_still():
+			all_still = false
+	# The dice are held only once every one of them has been still together for a moment.
+	_still_time = (_still_time + delta) if all_still else 0.0
 	# A die jostled for a split second as it is let go does not count as the dice moving again.
 	var still_moving := false
 	for die in dice:
@@ -567,7 +576,7 @@ func _check_settled(delta: float) -> void:
 	_moving_time = (_moving_time + delta) if still_moving else 0.0
 	if _moving_time > PIN_REARM_SECONDS:
 		_pin_spent = false
-	if all_settled and not _pinned and not _pin_spent:
+	if all_settled and _still_time >= SETTLE_HOLD and not _pinned and not _pin_spent:
 		_pinned = true
 		Haptics.pulse(25)
 		for die in dice:

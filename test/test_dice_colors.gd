@@ -447,3 +447,20 @@ func test_settled_dice_are_held_until_a_tap_and_then_stay_free() -> void:
 	assert_false(die.freeze, "a tap lets it go")
 	await wait_seconds(0.8)
 	assert_false(die.freeze, "and it is not held again while it stays still")
+
+
+func test_the_dice_are_held_only_once_every_die_has_settled() -> void:
+	var tool := _tool([{"sides": 6, "color": DiceTool.PALETTE[0]}, {"sides": 6, "color": DiceTool.PALETTE[1]}])
+	await wait_seconds(5.0)
+	var first: Die = tool._table.dice[0]
+	var second: Die = tool._table.dice[1]
+	assert_true(first.freeze and second.freeze, "both held once both have landed")
+	tool._table.release()
+	await wait_seconds(0.3)
+	# One die is sent off again: the other, lying still, is not held on its own.
+	second.linear_velocity = Vector3(6, 3, 0)
+	second.angular_velocity = Vector3(8, 0, 3)
+	for i in 6:
+		await wait_seconds(0.2)
+		if not second.is_still():
+			assert_false(first.freeze, "a die is not held while another is still moving")

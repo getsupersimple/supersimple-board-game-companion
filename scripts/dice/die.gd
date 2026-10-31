@@ -363,6 +363,11 @@ func _on_body_entered(other: Node) -> void:
 	impact.emit(speed)
 
 
+## Barely moving at all, a good deal stricter than at rest: slow enough that it is not about to topple.
+func is_still() -> bool:
+	return linear_velocity.length() < REST_LINEAR_SPEED * 0.3 and angular_velocity.length() < REST_ANGULAR_SPEED * 0.3
+
+
 func is_at_rest() -> bool:
 	return linear_velocity.length() < REST_LINEAR_SPEED and angular_velocity.length() < REST_ANGULAR_SPEED
 

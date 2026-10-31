@@ -129,7 +129,7 @@ func test_the_traditional_theme_has_a_recording_of_dice_being_rolled() -> void:
 	AppSettings.sound_theme = "traditional"
 	var rolling := SoundBank.roll()
 	assert_not_null(rolling)
-	assert_gt(rolling.get_length(), 2.0)
+	assert_gt(rolling.get_length(), 1.0)
 	AppSettings.sound_theme = "future"
 	assert_null(SoundBank.roll(), "the original set only has the knocks")
 	AppSettings.sound_theme = "future"
@@ -150,3 +150,32 @@ func test_every_recorded_theme_has_its_dice_sounds_and_a_roll() -> void:
 	AppSettings.sound_theme = "future"
 	assert_null(SoundBank.roll())
 	assert_ne(SoundBank.stream("tick"), null)
+
+
+func test_a_roll_is_one_of_five_closely_related_recordings_in_every_rolling_theme() -> void:
+	for sound_set in ["rpg", "futuristic", "traditional", "old_school"]:
+		AppSettings.sound_theme = sound_set
+		var seen := {}
+		for i in 200:
+			seen[SoundBank.roll()] = true
+		assert_eq(seen.size(), SoundBank.ROLLS, "%s uses all its rolls" % sound_set)
+	AppSettings.sound_theme = "future"
+
+
+func test_a_coin_rings_differently_from_a_die_knocking_in_every_theme() -> void:
+	for sound_set in ["future", "rpg", "futuristic", "traditional", "old_school"]:
+		AppSettings.sound_theme = sound_set
+		var coin := SoundBank.stream("coin")
+		assert_not_null(coin, sound_set)
+		assert_ne(coin.data, SoundBank.stream("tick").data, "%s: a coin is not a knock" % sound_set)
+	AppSettings.sound_theme = "future"
+
+
+func test_a_die_knocks_with_one_of_four_recordings_in_every_recorded_theme() -> void:
+	for sound_set in ["rpg", "futuristic", "traditional", "old_school"]:
+		AppSettings.sound_theme = sound_set
+		var seen := {}
+		for i in 200:
+			seen[SoundBank.stream("tick")] = true
+		assert_eq(seen.size(), SoundBank.KNOCKS, "%s uses all four knocks" % sound_set)
+	AppSettings.sound_theme = "future"

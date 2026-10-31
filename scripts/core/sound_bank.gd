@@ -10,19 +10,22 @@ const BUZZER_SOUNDS: Array[String] = ["buzz", "ding", "horn", "siren"]
 const BUZZER_ICONS := {"buzz": "circle-x", "ding": "bell", "horn": "megaphone", "siren": "siren"}
 
 ## The recordings that stand in for sounds in the "rpg" theme, by what they are for.
-const RPG_FILES := {"chain": "lock", "unchain": "unlock", "chime": "chime", "ding": "ding"}
+const RPG_FILES := {"chain": "lock", "unchain": "unlock", "chime": "chime", "ding": "ding", "coin": "coin"}
 ## What the "rpg" theme holds down: a low bronze gong, a war horn and an alarm bell.
 const RPG_HELD := {"buzz": "buzz_loop", "horn": "horn_loop", "siren": "siren_loop"}
 ## Themes made of recordings, in `assets/sounds/<theme>/` under the same file names: five alarms
 ## that serve every tool that ends or calls with a sound (the buzzer's four, and the hourglass and
 ## digital timer's end sounds, chime by default), and a knock and a lock and unlock for the dice.
 const ALARM_THEMES: Array[String] = ["futuristic", "traditional", "old_school"]
-## Their dice sounds, by what they are for: a die knocking, a lock closing, a lock opening.
-const DICE_FILES := {"tick": "tick", "chain": "lock", "unchain": "unlock"}
+## Their dice sounds, by what they are for: a coin ringing, a lock closing, a lock opening. A die
+## knocking is one of four recordings, `knock_1.wav` to `knock_4.wav`, in every recorded theme.
+const DICE_FILES := {"coin": "coin", "chain": "lock", "unchain": "unlock"}
 const ALARM_FILES := {"chime": "chime", "ding": "ding", "buzz": "buzz_loop", "horn": "horn_loop", "siren": "siren_loop"}
 const ALARM_HELD := {"buzz": "buzz_loop", "horn": "horn_loop", "siren": "siren_loop"}
-## The recordings of dice being rolled, by sound theme. Themes without one just have the knocks.
-const ROLL_FILES := {"rpg": "die_roll", "futuristic": "die_roll", "traditional": "die_roll", "old_school": "die_roll"}
+## The themes that have recordings of dice being rolled (`die_roll.wav`, `die_roll_2.wav` ...
+## `die_roll_5.wav`); one of them is played at random. Other themes just have the knocks.
+const ROLL_THEMES: Array[String] = ["rpg", "futuristic", "traditional", "old_school"]
+const ROLLS := 5
 ## How many recordings of a die knocking there are.
 const KNOCKS := 4
 
@@ -47,10 +50,10 @@ static func stream(kind: String) -> AudioStreamWAV:
 		var recorded: String = ALARM_FILES.get(kind, DICE_FILES.get(kind, ""))
 		if recorded != "":
 			return _recording(recorded, AppSettings.sound_theme)
+	if kind == "tick" and (AppSettings.sound_theme == "rpg" or ALARM_THEMES.has(AppSettings.sound_theme)):
+		# A die knocking is one of four recordings of the dice's material, a different one each time.
+		return _recording("knock_%d" % (randi() % KNOCKS + 1), AppSettings.sound_theme)
 	if AppSettings.sound_theme == "rpg":
-		# A die knocking is one of four recordings of wood on wood, a different one each time.
-		if kind == "tick":
-			return _recording("knock_%d" % (randi() % KNOCKS + 1))
 		var file: String = RPG_FILES.get(kind, "")
 		if file != "":
 			return _recording(file)
@@ -62,8 +65,10 @@ static func stream(kind: String) -> AudioStreamWAV:
 
 ## The sound of dice being thrown in the sound theme that is chosen now, or null if it has none.
 static func roll() -> AudioStreamWAV:
-	var file: String = ROLL_FILES.get(AppSettings.sound_theme, "")
-	return _recording(file, AppSettings.sound_theme) if file != "" else null
+	if not ROLL_THEMES.has(AppSettings.sound_theme):
+		return null
+	var n := randi() % ROLLS + 1
+	return _recording("die_roll" if n == 1 else "die_roll_%d" % n, AppSettings.sound_theme)
 
 
 ## A recording of a theme ("rpg" unless said), loaded once.
@@ -209,6 +214,11 @@ static func _build(kind: String) -> AudioStreamWAV:
 				for note in notes:
 					sound += _tube(t, note[0], note[1], note[2])
 				return sound)
+		"coin":
+			# A coin dropped on a table: two bright metal rings that die away quickly.
+			return _render(0.35, func(t: float) -> float:
+				var ring := _mode(t, 0.0, 3100.0, 22.0, 0.5) + _mode(t, 0.012, 4350.0, 30.0, 0.3) + _mode(t, 0.0, 5200.0, 40.0, 0.2)
+				return ring * 0.8)
 		"tick":
 			# A short click for a die knocking on something.
 			return _render(0.06, func(t: float) -> float:
